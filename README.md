@@ -5,9 +5,22 @@ Breaking up the steps of ancestryinfer to run highthroughput on large natural co
 
 Use ```bwa mem``` to map reads from hybrid to all parental references independently.
 
+```
+       bwa mem -M -R $RG1 $genome1 $read1 $read2 > $sam1
+       bwa mem -M -R $RG1 $genome2 $read1 $read2 > $sam2
+       bwa mem -M -R $RG1 $genome3 $read1 $read2 > $sam3
+
+#filter for mapping quality>29 and proper pairing with samtools
+
+#remove duplicates with picard
+
+```
+
 ## 2. Read Counting or Variant Calling
 
-Identify reads that do not map uniquely to parental genome and exclude them using ```ngsutils```. Then reads matching each parental allele at ancestry informative sites are counted from a samtools mpileup file for each hybrid individual. This is what the pipeline does and it works well for low coverage data but my data is high coverage (23x)
+Identify reads that do not map uniquely to parental genome and exclude them using ```ngsutils```. Then reads matching each parental allele at ancestry informative sites are counted from a samtools mpileup file for each hybrid individual. This is what the pipeline does and it works well for low coverage data but my data is high coverage (23x).
+
+So alternatively I could use do variant calling with bcftools.
 
 ## 3. Thinning to one AIM per read across individuals
 
