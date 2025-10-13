@@ -18,9 +18,8 @@ Use ```bwa mem``` to map reads from hybrid to all parental references independen
 
 ## 2. Read Counting or Variant Calling
 
-Identify reads that do not map uniquely to parental genome and exclude them using ```ngsutils```. Then reads matching each parental allele at ancestry informative sites are counted from a samtools mpileup file for each hybrid individual. This is what the pipeline does and it works well for low coverage data but my data is high coverage (23x).
+Identify reads that do not map uniquely to parental genome and exclude them using ```ngsutils```. Variant calling with bcftools, then reads matching each parental allele at ancestry informative sites are counted from a samtools mpileup file for each hybrid individual. 
 
-So alternatively I could use do variant calling with bcftools.
 
 ## 3. Thinning to one AIM per read across individuals
 
