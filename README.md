@@ -15,16 +15,19 @@ Use ```bwa mem``` to map reads from hybrid to all parental references independen
 #remove duplicates with picard
 
 ```
+## 2. Joint filtering of genomes
 
-## 2. Read Counting or Variant Calling
+Identify reads that do not map uniquely to parental genome and exclude them using ```ngsutils```. 
 
-Identify reads that do not map uniquely to parental genome and exclude them using ```ngsutils```. Variant calling with bcftools, then reads matching each parental allele at ancestry informative sites are counted from a samtools mpileup file for each hybrid individual. 
+## 3. Read Counting or Variant Calling
+
+Variant calling with bcftools, then reads matching each parental allele at ancestry informative sites are counted from a samtools mpileup file for each hybrid individual. 
 
 
-## 3. Thinning to one AIM per read across individuals
+## 4. Thinning to one AIM per read across individuals
 
 Counts for each parental allele at ancestry informative sites are subsampled to thin to one ancestry informative site per read if multiple sites occur within one read. This thinning is performed jointly across individuals such that the same site is retained for all individuals in the dataset.
 
-## 4. AncestryHMM
+## 5. AncestryHMM
 
 Requires ```armadillo```.
