@@ -3,24 +3,92 @@ Breaking up the steps of ancestryinfer to run highthroughput on large natural co
 
 ## 1. Aligning all samples to three reference genomes
 
-Use ```bwa mem``` to map reads from hybrid to all parental references independently.
+Use ```bwa mem``` to map reads from hybrid to all parental references independently. This is run using a script named ```map_batch.sh```.
 
 ```
 perl run_map_threegenomes_v1.pl $current_job $genome1 $genome2 $genome3 $read_type $tag\n
  ```
 
-and this would be run_map_threegenomes_v1.pl:
+or a more specific example:
 
 ```
-       bwa mem -M -R $RG1 $genome1 $read1 $read2 > $sam1
-       bwa mem -M -R $RG1 $genome2 $read1 $read2 > $sam2
-       bwa mem -M -R $RG1 $genome3 $read1 $read2 > $sam3
+#!/bin/bash
+#SBATCH --output=/project/dtataru/ancestryinfer/logs/map_%j.out
+#SBATCH --error=/project/dtataru/ancestryinfer/logs/map_%j.err
+#SBATCH --time=7-00:00:00
+#SBATCH -p single
+#SBATCH -N 1            #: Number of Nodes
+#SBATCH -n 1            #: Number of Tasks per Node
+#SBATCH -A loni_ferrislab
+#SBATCH --cpus-per-task=20
+#SBATCH --array=1   # Job array (1-n) when n is number of unique samples that came off the sequencer
 
-#filter for mapping quality>29 and proper pairing with samtools
+### LOAD MODULES ###
+module load python/3.11.5-anaconda
+module load boost/1.83.0/intel-2021.5.0
+module load gcc/13.2.0
+module load gsl/2.7.1/intel-2021.5.0
+#Load modules in the conda environment
+eval "$(conda shell.bash hook)"
+conda activate /home/dtataru/.conda/envs/ancestryinfer
 
-#remove duplicates with picard
+echo "Start Job"
+echo "SLURM_ARRAY_TASK_ID = ${SLURM_ARRAY_TASK_ID}"
+
+### ASSIGN VARIABLES ###
+R1=$(find /project/dtataru/hybrids/1_hybrid1data/ \
+    | grep R1_001.fastq.gz \
+    | sort \
+    | awk -v line=${SLURM_ARRAY_TASK_ID} 'line==NR')
+R2=$(find /project/dtataru/hybrids/1_hybrid1data/ \
+    | grep R2_001.fastq.gz \
+    | sort \
+    | awk -v line=${SLURM_ARRAY_TASK_ID} 'line==NR')
+
+SAMPLE=$(echo $R1 | cut -d "/" -f 6 | cut -d "_" -f 1-2)
+
+genome1="/project/dtataru/hybrids/ancestryinfer/reference_genomes/MguttatusTOL_551_v5.0.fa"
+genome2="/project/dtataru/hybrids/ancestryinfer/reference_genomes/Mnasutusvar_SF_822_v2.0.fa"
+genome3="/project/dtataru/hybrids/ancestryinfer/reference_genomes/WLF47.fasta"
+tag="_Chr-01"
+
+READLIST="read_list_${SAMPLE}.txt"
+echo -e "${R1}\t${R2}" > $READLIST
+
+echo "R1=$R1"
+echo "R2=$R2"
+echo "SAMPLE=$SAMPLE"
+echo "genome1=$genome1"
+echo "genome2=$genome2"
+echo "genome3=$genome3"
+echo "tag=$tag"
+
+### SET TMPDIR ###
+TMPDIR="/work/dtataru/TMPDIR/${SAMPLE}"
+mkdir -p "$TMPDIR"
+cd "$TMPDIR" || exit 1
+
+### MAPPING ###
+echo "Mapping ${SAMPLE} to three parental genomes"
+
+# Read group string
+RG="@RG\tID:${SAMPLE}\tSM:${SAMPLE}\tPL:illumina\tLB:hyblib1\tPU:LSIslowmode"
+
+# Run bwa mem for each parental genome
+bwa mem -M -R "$RG" "$genome1" "$R1" "$R2" > "${SAMPLE}${tag}.par1.sam"
+bwa mem -M -R "$RG" "$genome2" "$R1" "$R2" > "${SAMPLE}${tag}.par2.sam"
+bwa mem -M -R "$RG" "$genome3" "$R1" "$R2" > "${SAMPLE}${tag}.par3.sam"
+
+echo "Mapping complete for ${SAMPLE}"
+
+### OUTPUT LOGGING ###
+echo "Output SAM files"
+ls -lh ${SAMPLE}${tag}.par*.sam
+
+echo "End Job"
 
 ```
+
 ## 2. Joint filtering of genomes
 
 Identify reads that do not map uniquely to parental genome and exclude them using ```ngsutils```. 
