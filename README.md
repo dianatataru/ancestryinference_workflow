@@ -110,7 +110,7 @@ sbatch: lua: Submitted job 379027
 
 ## 2. Joint filtering of genomes
 
-Identify reads that do not map uniquely to parental genome and exclude them using. 
+Identify reads that do not map uniquely to parental genome and exclude them. 
 
 ```
 perl $path/run_samtools_to_hmm_threegenomes_v2.pl $current_job $genome1 $genome2 $genome3 $read_length $save_files $max_align $focal_chrom $rec_M_per_bp $path $quality\n
@@ -121,14 +121,13 @@ run_samtools_to_jointfiltering_DT.sh involves:
 ```
 #!/bin/bash
 #SBATCH --job-name=samtools_filter
-#SBATCH --output=/project/dtataru/ancestryinfer/logs/samtools_filter_%j.out
-#SBATCH --error=/project/dtataru/ancestryinfer/logs/samtools_filter_%j.err
+#SBATCH --output=/project/dtataru/ancestryinfer/logs/samtools_filter__%A_%a.out
+#SBATCH --error=/project/dtataru/ancestryinfer/logs/samtools_filter__%A_%a.err
 #SBATCH --time=3-00:00:00
 #SBATCH -p single
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH --cpus-per-task=12
-#SBATCH --mem=64G
 #SBATCH -A loni_ferrislab
 #SBATCH --array=1-4  # Adjust based on number of samples
 
@@ -154,32 +153,37 @@ echo "Working in TMPDIR: $TMPDIR"
 echo "Sample: $SAMPLE"
 
 ### PARAMETERS ###
-QUALITY=30
+QUALITY=29
 MAX_ALIGN=100000
 RATE=0.005
-AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
-PATH_SCRIPTS="/project/dtataru/ancestryinfer"
 THREADS=20
 
 ### MERGE LANES ###
 echo "merging lanes"
-for L in 1 2 3 4 & P in 1 2 3; do
-    SAM="${TMPDIR}/${SAMPLE}*_L00${L}.par${P}.sam"
-    BAM="${TMPDIR}/${SAMPLE}*_L00${L}.par${P}.bam"
 
-    samtools fixmate -O bam $SAM $BAM
-    samtools merge -f -@ ${THREADS} ${TMPDIR}/${SAMPLE}.merged.par${P}.bam ${BAM}
+for P in 1 2 3; do
+    SAM_FILES=("${TMPDIR}/${SAMPLE}"*_L00?.par${P}.sam)
+	 BAM_FILES=()
+
+   for SAM in "${SAM_FILES[@]}"; do
+        BAM="${SAM%.sam}.bam"
+        echo "Converting $SAM to $BAM"
+        samtools fixmate -O bam "$SAM" "$BAM"
+        BAM_FILES+=("$BAM")
+    done
+
+	MERGED_BAM="${TMPDIR}/${SAMPLE}.merged.par${P}.bam"
+    samtools merge -f -@ ${THREADS} "$MERGED_BAM" "${BAM_FILES[@]}"
 done
 
 ### SAMTOOLS SORT AND FILTER ###
 echo "Starting Samtools"
 
 for P in 1 2 3; do
-    BAM_MERGED="${TMPDIR}/${SAMPLE}.par${P}.bam"
     SORTED="${TMPDIR}/${SAMPLE}.par${P}.sorted.bam"
     UNIQUE="${TMPDIR}/${SAMPLE}.par${P}.sorted.unique.bam"
 
-    samtools sort -@ 12 -o $SORTED $BAM_MERGED
+    samtools sort -@ 12 -o $SORTED $MERGED_BAM
     samtools index $SORTED
     samtools view -b -q $QUALITY $SORTED > $UNIQUE
     samtools index $UNIQUE
@@ -203,44 +207,149 @@ fi
 
 for P in 1 2 3; do
     samtools view -N pass_all -b ${SAMPLE}.par${P}.sorted.unique.bam > ${SAMPLE}.par${P}.sorted.pass.unique.bam
-    samtools index ${SAMPLE}.par${P}.sorted.pass.unique.bam
+	samtools index ${SAMPLE}.par${P}.sorted.pass.unique.bam
 done
 
 ```
 
 ### 3. Variant Calling and Read Counting
 
-Variant calling with bcftools, then reads matching each parental allele at ancestry informative sites are counted from a samtools mpileup file for each hybrid individual. 
-
-At some point I think I need to reformat aims like they did in the wrapper:
-
+Joint variant calling across all samples with bcftools, then reads matching each parental allele at ancestry informative sites are counted from a samtools mpileup file for each hybrid individual. Note, this script calls ```vcf_to_counts_non-colinear_DTv2.pl```
 
 ```
-my $mpileup1 = "$unique1".".bcf";
+#!/bin/bash
+#SBATCH --job-name=varcall
+#SBATCH --output=/project/dtataru/ancestryinfer/logs/varcall_%A_%a.out
+#SBATCH --error=/project/dtataru/ancestryinfer/logs/varcall__%A_%a.err
+#SBATCH --time=3-00:00:00
+#SBATCH -p single
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH --cpus-per-task=12
+#SBATCH -A loni_ferrislab
 
-    if($chrom_string ne 'allchrs'){
-    system("bcftools mpileup -r $chrom_string -o $mpileup1 -f $genome1 $finalbam1
+### LOAD MODULES ###
+module load samtools/1.18
+module load bedtools/2.31.1
+module load bcftools/1.18
+eval "$(conda shell.bash hook)"
+conda activate /home/dtataru/.conda/envs/ancestryinfer
+
+### ASSIGN VARIABLES ###
+genome1="/project/dtataru/hybrids/ancestryinfer/reference_genomes/MguttatusTOL_551_v5.0.fa"
+genome2="/project/dtataru/hybrids/ancestryinfer/reference_genomes/Mnasutusvar_SF_822_v2.0.fa"
+genome3="/project/dtataru/hybrids/ancestryinfer/reference_genomes/WLF47.fasta"
+
+PATH_SCRIPTS="/project/dtataru/ancestryinfer"
+AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
+WORKDIR="/work/dtataru/HMM_INPUT"
+BAMDIR="/work/dtataru/TMPDIR"
+THREADS=20
+
+### MERGE ALL BAMS FOR VARIANT CALLING ###
+cd "$BAMDIR"
+
+for P in 1 2 3; do
+    BAM_FILES=("${BAMDIR}/*.par${P}.sorted.pass.unique.bam)
+	MERGED="${BAMDIR}/hybrids1merged.par${P}.pass.unique.bam"
+	SORTED="${BAMDIR}/hybrids1merged.par${P}.sorted.pass.unique.bam"
+
+   for BAM in "${BAM_FILES[@]}"; do
+        samtools merge -r -c -p -@ ${THREADS} $MERGED "${BAM_FILES[@]}
+		samtools sort -@ 12 -o $SORTED $MERGED
+    done
+
+	cp ${SORTED} /work/dtataru/HMM_INPUT/
+	samtools index ${WORKDIR}/${SORTED}
+done
+
+### VARIANT CALLING ###
+echo "start variant calling"
+
+cd "$WORKDIR"
+
+for P in 1 2 3; do
+    GENOME_VAR="genome${P}"
+    GENOME=${!GENOME_VAR}
+    BCF="hybrids1.par${P}.bcf"
+    VCF="hybrids1.par${P}.vcf.gz"
+
+    bcftools mpileup -r -f $GENOME -o $BCF $SORTED
+    bcftools call -mO z -o $VCF $BCF
+    gunzip $VCF
+done
+
+echo "finished variant calling"
 
 ### GENERATE HMM INPUT FILES ###
+echo "start generating hmm input"
 
-my $aims_bed="$aims".".mod";
-system("cat $aims | perl -p -e 's/_/\t/g' | awk -v OFS=\'\\t\' \'\$1=\$1\"\_\"\$2\' > $aims_bed");
-my $aims_truebed="$aims".".mod.bed";
-system("cat $aims | perl -p -e 's/_/\t/g' | awk -v OFS=\'\\t\' \'\$1=\$1\"\\t\"\$2\' > $aims_truebed");
+for P in 1 2 3; do
+    VCF="hybrids1.par${P}.vcf"
+    COUNTS="${VCF}_counts"
+    perl $PATH_SCRIPTS/vcf_to_counts_non-colinear_DTv2.pl $VCF $AIMS $PATH_SCRIPTS
+    cat $COUNTS | perl -p -e 's/_/\t/g' | \
+        awk -v OFS='\t' '{print $1, $2-1, $2, $4, $5, $6}' > ${COUNTS}.bed
+done
 
-hybfile="HMM.hybrid.files.list.${SAMPLE}${TAG}"
-parfile="HMM.parental.files.list.${SAMPLE}${TAG}"
-hybfile=${hybfile//\//} ; hybfile=${hybfile//../.}
-parfile=${parfile//\//} ; parfile=${parfile//../.}
-
-echo "${TMPDIR}/${SAMPLE}${TAG}.hmm.pass.formatted" > $hybfile
-echo "${TMPDIR}/${SAMPLE}${TAG}.hmm.parental.format" > $parfile
 
 ```
 
 ### 4. Thinning to one AIM per read across individuals
 
-Counts for each parental allele at ancestry informative sites are subsampled to thin to one ancestry informative site per read if multiple sites occur within one read. This thinning is performed jointly across individuals such that the same site is retained for all individuals in the dataset.
+Counts for each parental allele at ancestry informative sites are subsampled to thin to one ancestry informative site per read if multiple sites occur within one read. This thinning is performed jointly across individuals such that the same site is retained for all individuals in the dataset. This I will call ```counts_to_hmm_DT.sh```:
+
+```
+#!/bin/bash
+#SBATCH --job-name=counts_to_hmm
+#SBATCH --output=/project/dtataru/ancestryinfer/logs/counts_to_hmm_%A_%a.out
+#SBATCH --error=/project/dtataru/ancestryinfer/logs/counts_to_hmm__%A_%a.err
+#SBATCH --time=3-00:00:00
+#SBATCH -p single
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH --cpus-per-task=12
+#SBATCH -A loni_ferrislab
+
+### LOAD MODULES ###
+module load samtools/1.18
+module load bedtools/2.31.1
+module load bcftools/1.18
+eval "$(conda shell.bash hook)"
+conda activate /home/dtataru/.conda/envs/ancestryinfer
+
+### ASSIGN VARIABLES ###
+P=$(find /work/dtataru/TMPDIR/ -type d | sort | awk -v line=${SLURM_ARRAY_TASK_ID} 'line==NR')
+SAMPLE=$(echo $P | cut -d "/" -f 5 | cut -d "_" -f 1)
+
+genome1="/project/dtataru/hybrids/ancestryinfer/reference_genomes/MguttatusTOL_551_v5.0.fa"
+genome2="/project/dtataru/hybrids/ancestryinfer/reference_genomes/Mnasutusvar_SF_822_v2.0.fa"
+genome3="/project/dtataru/hybrids/ancestryinfer/reference_genomes/WLF47.fasta"
+
+PATH_SCRIPTS="/project/dtataru/ancestryinfer"
+AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
+echo "Working in TMPDIR: $TMPDIR"
+echo "Sample: $SAMPLE"
+
+cd /work/dtataru/TMPDIR/HMM_INPUT
+
+perl vcf_counts_to_hmmv2.pl \
+    GBG9_S280_repaired_subsamp_read_1.fastq.gz_Chr-01_Chr-02.par1.sam.sorted.unique.bam.vcf_counts \
+    /lustre/.../AIMs_panel15_final.AIMs.txt \
+    0.00000002 \
+    /lustre/project/kferris/Diana_Tataru/software/ancestryinfer
+
+### MAKE INPUT LISTS FOR HMM ###
+hybfile="HMM.hybrid.files.list"
+parfile="HMM.parental.files.list"
+
+echo "/work/dtataru/TMPDIR/HMM_INPUT/*.hmm.pass.formatted" > $hybfile
+echo "/work/dtataru/TMPDIR/HMM_INPUT/*.hmm.parental.format" > $parfile
+
+
+
+
+```
 
 ### 5. AncestryHMM
 
