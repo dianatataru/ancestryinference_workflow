@@ -1,9 +1,11 @@
 # ancestryinference_workflow
 Breaking up the steps of ancestryinfer to run highthroughput on large natural complex hybrid dataset
 
+Check that all files transferred by running ```bash check_missing_fastq.sh /project/dtataru/hybrids/1_hybrid1data/``` in hybrids director/
+
 ## 1. Aligning all samples to three reference genomes
 
-Use ```bwa mem``` to map reads from hybrid to all parental references independently. This is run using a script named ```map_array_DT.sh```. In the TMPDIR, this creates a folder for each sample, with all reads aligned for each lane run. In the next step, these separate runs will be merged.
+Use ```bwa mem``` to map reads from hybrid to all parental references independently. This is run using a script named ```map_array_DT.sh```. In the TMPDIR, this creates a folder for each sample, with all reads aligned for each lane run. In the next step, these separate runs will be merged. This script is ```map_array_DT.sh ```.
 
 ```
 #!/bin/bash
@@ -132,8 +134,7 @@ run_samtools_to_jointfiltering_DT.sh involves:
 #SBATCH --array=1-4  # Adjust based on number of samples
 
 ### LOAD MODULES ###
-module load samtools/1.18
-module load bedtools/2.31.1
+module load samtools/1.19
 module load bcftools/1.18
 eval "$(conda shell.bash hook)"
 conda activate /home/dtataru/.conda/envs/ancestryinfer
@@ -193,6 +194,8 @@ echo "Samtools Done"
 
 ### JOINT FILTERING ###
 
+echo "Start Joint Filtering"
+
 samtools view -F 4 ${SAMPLE}.par1.sorted.unique.bam | cut -f1 > p1_pass
 samtools view -F 4 ${SAMPLE}.par2.sorted.unique.bam | cut -f1 > p2_pass
 samtools view -F 4 ${SAMPLE}.par3.sorted.unique.bam | cut -f1 > p3_pass
@@ -209,6 +212,8 @@ for P in 1 2 3; do
     samtools view -N pass_all -b ${SAMPLE}.par${P}.sorted.unique.bam > ${SAMPLE}.par${P}.sorted.pass.unique.bam
 	samtools index ${SAMPLE}.par${P}.sorted.pass.unique.bam
 done
+
+echo "Job Done"
 
 ```
 
@@ -229,8 +234,7 @@ Joint variant calling across all samples with bcftools, then reads matching each
 #SBATCH -A loni_ferrislab
 
 ### LOAD MODULES ###
-module load samtools/1.18
-module load bedtools/2.31.1
+module load samtools/1.19
 module load bcftools/1.18
 eval "$(conda shell.bash hook)"
 conda activate /home/dtataru/.conda/envs/ancestryinfer
