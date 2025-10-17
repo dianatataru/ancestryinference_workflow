@@ -226,8 +226,8 @@ Joint variant calling across all samples with bcftools, then reads matching each
 ```
 #!/bin/bash
 #SBATCH --job-name=varcall
-#SBATCH --output=/project/dtataru/ancestryinfer/logs/varcall_%A_%a.out
-#SBATCH --error=/project/dtataru/ancestryinfer/logs/varcall__%A_%a.err
+#SBATCH --output=/project/dtataru/ancestryinfer/logs/varcall_%j.out
+#SBATCH --error=/project/dtataru/ancestryinfer/logs/varcall__%j.err
 #SBATCH --time=3-00:00:00
 #SBATCH -p single
 #SBATCH -N 1
@@ -307,8 +307,8 @@ Counts for each parental allele at ancestry informative sites are subsampled to 
 ```
 #!/bin/bash
 #SBATCH --job-name=counts_to_hmm
-#SBATCH --output=/project/dtataru/ancestryinfer/logs/counts_to_hmm_%A_%a.out
-#SBATCH --error=/project/dtataru/ancestryinfer/logs/counts_to_hmm__%A_%a.err
+#SBATCH --output=/project/dtataru/ancestryinfer/logs/counts_to_hmm_%j.out
+#SBATCH --error=/project/dtataru/ancestryinfer/logs/counts_to_hmm__%j.err
 #SBATCH --time=3-00:00:00
 #SBATCH -p single
 #SBATCH -N 1
@@ -323,10 +323,6 @@ eval "$(conda shell.bash hook)"
 conda activate /home/dtataru/.conda/envs/ancestryinfer
 
 ### ASSIGN VARIABLES ###
-genome1="/project/dtataru/hybrids/ancestryinfer/reference_genomes/MguttatusTOL_551_v5.0.fa"
-genome2="/project/dtataru/hybrids/ancestryinfer/reference_genomes/Mnasutusvar_SF_822_v2.0.fa"
-genome3="/project/dtataru/hybrids/ancestryinfer/reference_genomes/WLF47.fasta"
-
 PATH_SCRIPTS="/project/dtataru/ancestryinfer"
 AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
 WORKDIR="/work/dtataru/TMPDIR/HMM_INPUT"
@@ -334,6 +330,19 @@ WORKDIR="/work/dtataru/TMPDIR/HMM_INPUT"
 echo "Working in WORKDIR: $WORKDIR"
 cd $WORKDIR
 
+### REFORMAT AIMs FILE ###
+echo "Reformatting AIMs file..."
+AIMS_BED="${AIMS}.mod"
+AIMS_TRUEBED="${AIMS}.mod.bed"
+
+# Convert underscores to tabs, then reassemble chromosome_position as first column
+cat "$AIMS" | perl -pe 's/_/\t/g' | awk -v OFS='\t' '{print $1"_"$2, $0}' > "$AIMS_BED"
+
+# Same as above but also make a BED-style version with separate chrom and position columns
+cat "$AIMS" | perl -pe 's/_/\t/g' | awk -v OFS='\t' '{print $1, $2, $0}' > "$AIMS_TRUEBED"
+
+### RUN COUNTS TO HMM INPUT ###
+echo "Calling AIMs from counts"
 for P in 1 2 3; do
     VCF="hybrids1.par${P}.vcf"
     COUNTS="${VCF}_counts"
@@ -341,51 +350,80 @@ for P in 1 2 3; do
 done
 
 ### MAKE INPUT LISTS FOR HMM ###
-hybfile="HMM.hybrid.files.list"
-parfile="HMM.parental.files.list"
+#hybfile="HMM.hybrid.files.list"
+#parfile="HMM.parental.files.list"
 
-echo "/work/dtataru/TMPDIR/HMM_INPUT/*.hmm.pass.formatted" > $hybfile
-echo "/work/dtataru/TMPDIR/HMM_INPUT/*.hmm.parental.format" > $parfile
+#echo "/work/dtataru/TMPDIR/HMM_INPUT/*.hmm.pass.formatted" > $hybfile
+#echo "/work/dtataru/TMPDIR/HMM_INPUT/*.hmm.parental.format" > $parfile
 
-
-
+echo "Job Done"
 
 ```
 
 ### 5. AncestryHMM
 
-Requires ```armadillo```. 
-
-From main ```Ancestry_HMM_parallel_v7.pl```:
+Run main ancestryhmm program.
 
 ```
-my $final_file1="ancestry-probs-par1_transposed"."$tag".".tsv"; my $final_file2="ancestry-probs-par2_transposed"."$tag".".tsv"; my $final_file3="ancestry-probs-par3_transposed"."$tag".".tsv"; 
-    my $final_file4="ancestry-probs-par1par2_transposed"."$tag".".tsv";
-    my $final_file5="ancestry-probs-par1par3_transposed"."$tag".".tsv";
-    my $final_file6="ancestry-probs-par2par3_transposed"."$tag".".tsv";
+#!/bin/bash
+#SBATCH --job-name=ancestryhmm
+#SBATCH --output=/project/dtataru/ancestryinfer/logs/ancestryhmm_%j.out
+#SBATCH --error=/project/dtataru/ancestryinfer/logs/ancestryhmm__%j.err
+#SBATCH --time=3-00:00:00
+#SBATCH -p single
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH --cpus-per-task=12
+#SBATCH -A loni_ferrislab
 
-    print "output files appended with $tag\n";
-    open HMMSCRIPT, ">hmm_batch.sh";
-    print HMMSCRIPT "$job3_submit\n";
-    print HMMSCRIPT "cat $hyb_string > HMM.hybrid.files.list"."$tag"."\n";
-    print HMMSCRIPT "cat $par_string >HMM.parental.files.list"."$tag"."\n";
+### LOAD MODULES ###
+module load python/3.11.5-anaconda
+module load boost/1.83.0/intel-2021.5.0
+module load gcc/13.2.0
+module load gsl/2.7.1/intel-2021.5.0
+module load r/4.4.1
+eval "$(conda shell.bash hook)"
+conda activate /home/dtataru/.conda/envs/ancestryinfer
 
-    print HMMSCRIPT "perl $path/combine_all_individuals_hmm_3way_v1.pl HMM.parental.files.list"."$tag HMM.hybrid.files.list"."$tag $minor_prior1 $minor_prior2 $parental_counts_status $initial_admix $initial_admix2 $focal_chrom $read_length $error_prior $tag\n";
-#!print "perl combine_all_individuals_hmm_v5.pl HMM.parental.files.list HMM.hybrid.files.list $minor_prior $parental_counts_status $initial_admix $focal_chrom $read_length $error_prior $tag\n";
+### ASSIGN VARIABLES ###
+PATH_SCRIPTS="/project/dtataru/ancestryinfer"
+AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
+WORKDIR="/work/dtataru/TMPDIR/HMM_OUTPUT"
+INPUTDIR="/work/dtataru/TMPDIR/HMM_OUTPUT"
 
-    print HMMSCRIPT "perl $path/convert_rchmm_to_ancestry_tsv_3way_v1.pl current.samples.list current.samples.read.list $save_files $focal_chrom\n";
-    print HMMSCRIPT "perl $path/transpose_tsv.pl $final_file1\n";
-    print HMMSCRIPT "perl $path/transpose_tsv.pl $final_file2\n";
-    print HMMSCRIPT "perl $path/transpose_tsv.pl $final_file3\n";
-    print HMMSCRIPT "perl $path/transpose_tsv.pl $final_file4\n";
-    print HMMSCRIPT "perl $path/transpose_tsv.pl $final_file5\n";
-    print HMMSCRIPT "perl $path/transpose_tsv.pl $final_file6\n";
-    print HMMSCRIPT "rm split_jobs_list\n"; #cleanup split read lists 
-    print HMMSCRIPT "rm $aims_truebed $aims_bed\n"; #cleanup different aims files
+HYBFILE="${INPUTDIR}/hybrid.files.list"
+PARFILE="${INPUTDIR}/parental.files.list"
+INITIAL_ADMIX=0.33
+INITIAL_ADMIX2=0.33
+READ_LENGTH=100
+ERROR_PRIOR=0.02
+SAVE_FILES="save_all"
+AIMS_TRUEBED="${AIMS}.mod.bed"
+AIMS_BED="${AIMS}.mod"
+FOCAL_CHROM_LIST=""
+
+echo "Working directory: $WORKDIR"
+cd $WORKDIR
+
+### RUN HMM ###
+echo "run HMM"
+
+perl ${PATH_SCRIPTS}/combine_all_individuals_hmm_3way_v1.pl ${PARFILE} ${HYBFILE} ${INITIAL_ADMIX} ${INITIAL_ADMIX2} AIMs_panel15_final.AIMs_counts.txt 0 0 ${FOCAL_CHROM_LIST} ${READ_LENGTH} ${ERROR_PRIOR} 
+
+perl ${PATH_SCRIPTS}/convert_rchmm_to_ancestry_tsv_3way_v1.pl current.samples.list current.samples.read.list 1 ${FOCAL_CHROM_LIST}
+
+echo "HMM Done"
+
+### TRANSPOSE OUTPUT ###
+echo "Run Transpose"
+
+perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par1_transposed.tsv
+perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par2_transposed.tsv
+perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par3_transposed.tsv
+perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par1par2_transposed.tsv
+perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par1par3_transposed.tsv
+perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par2par3_transposed.tsv
+
+echo "Job Done"
 ```
 
-## 6. Reformatting HMM Output
-
-```
-perl $path/convert_rchmm_to_ancestry_tsv_v3.pl current.samples.list current.samples.read.list $save_files $focal_chrom\n"
-perl $path/transpose_tsv.pl $final_file1\n"
