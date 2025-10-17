@@ -17,7 +17,7 @@ Use ```bwa mem``` to map reads from hybrid to all parental references independen
 #SBATCH -n 1            #: Number of Tasks per Node
 #SBATCH -A loni_ferrislab
 #SBATCH --cpus-per-task=12
-#SBATCH --array=5-10   # Job array (1-n) when n is number of unique samples that came off the sequencer
+#SBATCH --array=41-140%32   # Job array when n is number of unique samples, % is array throttling (do 32 at a time, 8 samples)
 
 ### LOAD MODULES ###
 #For this step, bwa and needed
@@ -110,7 +110,7 @@ sbatch: 129499.42 SUs available in loni_ferrislab
 sbatch: 2016.00 SUs estimated for this job.
 sbatch: lua: Submitted job 379027
 
-It takes ~3 hours to run, so far. So if I'm running 10 samples at a time, that would be ~30 samples a day, and it would take ~10 days to do the alignment.
+It takes ~12 hours to run. So if I'm running 32 samples at a time (max allowed by HPC, also don't queue more than 100 at a time), that would be ~30 samples a day, and it would take ~10 days to do the alignment.
 
 ## 2. Joint filtering of genomes
 
