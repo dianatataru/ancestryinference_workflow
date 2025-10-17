@@ -5,13 +5,13 @@ Check that all files transferred by running ```bash check_missing_fastq.sh /proj
 
 ## 1. Aligning all samples to three reference genomes
 
-Use ```bwa mem``` to map reads from hybrid to all parental references independently. This is run using a script named ```map_array_DT.sh```. In the TMPDIR, this creates a folder for each sample, with all reads aligned for each lane run. In the next step, these separate runs will be merged. This script is ```map_array_DT.sh ```.
+Use ```bwa mem``` to map reads from hybrid to all parental references independently. Input files are fastq files for all samples, four lanes per sample and two reads per lane (Total 1,232 arrays).  In the TMPDIR, this creates a folder for each sample, with all reads aligned for each lane run. Output is three .sam files for each sample, corresponding to each species' reference genome. In the next step, these separate runs will be merged. This script is ```map_array_DT.sh ```.
 
 ```
 #!/bin/bash
 #SBATCH --output=/project/dtataru/ancestryinfer/logs/map_%A_%a.out
 #SBATCH --error=/project/dtataru/ancestryinfer/logs/map_%A_%a.err
-#SBATCH --time=7-00:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH -p single
 #SBATCH -N 1            #: Number of Nodes
 #SBATCH -n 1            #: Number of Tasks per Node
@@ -110,9 +110,11 @@ sbatch: 129499.42 SUs available in loni_ferrislab
 sbatch: 2016.00 SUs estimated for this job.
 sbatch: lua: Submitted job 379027
 
+It takes ~3 hours to run, so far. So if I'm running 10 samples at a time, that would be ~30 samples a day, and it would take ~10 days to do the alignment.
+
 ## 2. Joint filtering of genomes
 
-Identify reads that do not map uniquely to parental genome and exclude them. 
+Identify reads that do not map uniquely to parental genome and exclude them. Input is three .sam files for each sample (one per species reference), output is three sorted.pass.unique.bam for each sample. All of this takes place in each samples directory in TMPDIR, total array # is 308.
 
 ```
 perl $path/run_samtools_to_hmm_threegenomes_v2.pl $current_job $genome1 $genome2 $genome3 $read_length $save_files $max_align $focal_chrom $rec_M_per_bp $path $quality\n
@@ -131,7 +133,7 @@ run_samtools_to_jointfiltering_DT.sh involves:
 #SBATCH -n 1
 #SBATCH --cpus-per-task=12
 #SBATCH -A loni_ferrislab
-#SBATCH --array=1-4  # Adjust based on number of samples
+#SBATCH --array=2  # For some reason this starts at array 2
 
 ### LOAD MODULES ###
 module load samtools/1.19
@@ -155,7 +157,7 @@ echo "Sample: $SAMPLE"
 
 ### PARAMETERS ###
 QUALITY=29
-MAX_ALIGN=100000
+MAX_ALIGN=0 #was set to 2000000 before, but trying out keeping all reads
 RATE=0.005
 THREADS=20
 
@@ -219,7 +221,7 @@ echo "Job Done"
 
 ### 3. Variant Calling and Read Counting
 
-Joint variant calling across all samples with bcftools, then reads matching each parental allele at ancestry informative sites are counted from a samtools mpileup file for each hybrid individual. Note, this script calls ```vcf_to_counts_non-colinear_DTv2.pl```
+Joint variant calling across all samples with bcftools, then reads matching each parental allele at ancestry informative sites are counted from a samtools mpileup file for each hybrid individual. Note, this script calls ```vcf_to_counts_non-colinear_DTv2.pl```. Input files are each of the ${SAMPLE}.par${P}.sorted.pass.unique.bam files, which are merged by parental species' genome, and output files are hybrid1 vcf counts and .bed files for each parent (3 total). This script will be called ```varcall_readcount_DT.sh```.
 
 ```
 #!/bin/bash
@@ -255,16 +257,15 @@ cd "$BAMDIR"
 
 for P in 1 2 3; do
     BAM_FILES=("${BAMDIR}/*.par${P}.sorted.pass.unique.bam)
-	MERGED="${BAMDIR}/hybrids1merged.par${P}.pass.unique.bam"
-	SORTED="${BAMDIR}/hybrids1merged.par${P}.sorted.pass.unique.bam"
+	MERGED="${WORKDIR}/hybrids1merged.par${P}.pass.unique.bam"
+	SORTED="${WORKDIR}/hybrids1merged.par${P}.sorted.pass.unique.bam"
 
    for BAM in "${BAM_FILES[@]}"; do
         samtools merge -r -c -p -@ ${THREADS} $MERGED "${BAM_FILES[@]}
-		samtools sort -@ 12 -o $SORTED $MERGED
     done
 
-	cp ${SORTED} /work/dtataru/HMM_INPUT/
-	samtools index ${WORKDIR}/${SORTED}
+	samtools sort -@ 12 -o $SORTED $MERGED
+	samtools index $SORTED
 done
 
 ### VARIANT CALLING ###
@@ -296,7 +297,7 @@ for P in 1 2 3; do
         awk -v OFS='\t' '{print $1, $2-1, $2, $4, $5, $6}' > ${COUNTS}.bed
 done
 
-
+echo "Job Done"
 ```
 
 ### 4. Thinning to one AIM per read across individuals
@@ -316,32 +317,28 @@ Counts for each parental allele at ancestry informative sites are subsampled to 
 #SBATCH -A loni_ferrislab
 
 ### LOAD MODULES ###
-module load samtools/1.18
-module load bedtools/2.31.1
+module load samtools/1.19
 module load bcftools/1.18
 eval "$(conda shell.bash hook)"
 conda activate /home/dtataru/.conda/envs/ancestryinfer
 
 ### ASSIGN VARIABLES ###
-P=$(find /work/dtataru/TMPDIR/ -type d | sort | awk -v line=${SLURM_ARRAY_TASK_ID} 'line==NR')
-SAMPLE=$(echo $P | cut -d "/" -f 5 | cut -d "_" -f 1)
-
 genome1="/project/dtataru/hybrids/ancestryinfer/reference_genomes/MguttatusTOL_551_v5.0.fa"
 genome2="/project/dtataru/hybrids/ancestryinfer/reference_genomes/Mnasutusvar_SF_822_v2.0.fa"
 genome3="/project/dtataru/hybrids/ancestryinfer/reference_genomes/WLF47.fasta"
 
 PATH_SCRIPTS="/project/dtataru/ancestryinfer"
 AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
-echo "Working in TMPDIR: $TMPDIR"
-echo "Sample: $SAMPLE"
+WORKDIR="/work/dtataru/TMPDIR/HMM_INPUT"
 
-cd /work/dtataru/TMPDIR/HMM_INPUT
+echo "Working in WORKDIR: $WORKDIR"
+cd $WORKDIR
 
-perl vcf_counts_to_hmmv2.pl \
-    GBG9_S280_repaired_subsamp_read_1.fastq.gz_Chr-01_Chr-02.par1.sam.sorted.unique.bam.vcf_counts \
-    /lustre/.../AIMs_panel15_final.AIMs.txt \
-    0.00000002 \
-    /lustre/project/kferris/Diana_Tataru/software/ancestryinfer
+for P in 1 2 3; do
+    VCF="hybrids1.par${P}.vcf"
+    COUNTS="${VCF}_counts"
+	perl ${PATH_SCRIPTS}/vcf_counts_to_hmmv2.pl $COUNTS $AIMS 0.00000002 $PATH_SCRIPTS
+done
 
 ### MAKE INPUT LISTS FOR HMM ###
 hybfile="HMM.hybrid.files.list"
