@@ -1,11 +1,51 @@
 # ancestryinference_workflow
-Breaking up the steps of ancestryinfer to run highthroughput on large natural complex hybrid dataset
+Alterations to the Schumer Lab's threeway ancestryinfer program (https://github.com/Schumerlab/ancestryinfer) to be run with three Mimulus species (M. guttatus, M. lacinatus, M. nasutus). Requires downloading the ancestryinfer program to run.
 
-Check that all files transferred by running ```bash check_missing_fastq.sh /project/dtataru/hybrids/1_hybrid1data/``` in hybrids director/
+Written by: Diana Tataru
+Created: June 11, 2025
 
+## 0. Create AIMS: Run genotype_filter.sh
+
+This script is adapted for three species from the following manuscript: Fluctuating reproductive isolation and stable ancestry structure in a fine-scaled mosaic of #hybridizing Mimulus monkeyflowers" by Matthew Farnitano, Keith Karoly, and Andrea Sweigart, and github: https://github.com/mfarnitano/CAC_popgen/#blob/main/reference_panels/genotype_filter.sh  
+
+Located in ```/lustre/project/kferris/Diana_Tataru/lac_nas_gut/AIMS```. This script creates a file with ancestry informative sites (AIMs) from 5 allopatric populations each of three species: *M. guttatus, M.laciniatus,* and *M. nasutus*. Input file for it is a joint genotyped vcf ```lacnasgut_jointgeno.vcf.gz```, created using the Ferris Lab GATK variant calling pipeline, using TOLv5 of *M. guttatus* as the reference. These are the populations used:
+
+|    Species    |  Pop |    SRA     | Longitude  | Latitude  |
+|    -------    | ---  | ---------  | ---------  | --------  |
+|  M. guttatus  |  TOL | Phyt 551   | -120.63315 | 37.969917 |
+|  M. guttatus  |  YVO | Unpub.     | -119.74643 | 37.723367 |
+|  M. guttatus  | MAR  | SRX030542  | -123.29445 | 43.4786   |
+|  M. guttatus  | LMC  | SRX030680  | -123.083917| 38.863983 |
+|  M. guttatus  | IM   | SRR398937  | -122.508783|	45.57571 |
+|  M. guttatus  | AHQT | SRX142379  | -110.813   | 44.431    |
+| M. laciniatus | OPN  | SRR23709136| -119.4852	 | 37.8107   |
+| M. laciniatus	| WLF  | Unpub.	    | -119.59385 | 37.841533 |
+| M. laciniatus	| TRT  | SRX19570592| -119.70535 |	37.7165  |
+| M. laciniatus	| PER  | SRX19570591| -119.3687	 | 37.055767 |
+| M. laciniatus	| HUL  | Unpub.	    | -119.150168| 37.2334366|
+| M. nasutus	| SF   | SRR29155563| -121.0225	 | 45.264444 |
+| M. nasutus	| DPRN | SRR1259273	| -120.344	 | 37.828    |
+| M. nasutus	| KOOT | SRR1259272	| -115.983	 | 48.104    |
+| M. nasutus	| NHN  | SRX525051	| -124.16	 | 49.273    |
+| M. nasutus	| CACN | SRR1259271	| -121.3667	 | 45.71076  |
+
+To visualize distribution of AIMs genomewide, run ```visualizeAIMs.R ```. This also outputs number of AIMS per chromosome:
+
+| Chr01 | Chr02 | Chr03 | Chr04 | Chr05 | Chr06 | Chr07 | Chr08 | Chr09 | Chr10 | Chr11 | Chr12 | Chr13 | Chr14 |
+| ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
+|  9260 | 15019 | 11090 | 17851 | 13041 | 16073 | 8709  | 20077 | 10296 | 15111 | 11289 | 14642 | 15133 | 25823 | 
+
+Additional files needed to run this:
+Located in ```/project/dtataru/ancestryinfer```. This has multiple input files that need to be created and changed.   
+  a.  output ```AIMs_panel15_final.AIMs_counts.txt``` & ```AIMs_panel15_final.AIMs.txt``` 
+  b.  Reference genomes for each of three species, I'm using the following, listed in ```/project/dtataru/hybrids/ancestryinfer/reference_genomes/```:  
+      1.  MguttatusTOL_551_v5.0.fa  
+      2.  Mnasutusvar_SF_822_v2.0.fa  
+      3.  WLF47.fasta (consensus genome made by me with high coverage unpub. sequencing data  
+	  
 ## 1. Aligning all samples to three reference genomes
 
-Use ```bwa mem``` to map reads from hybrid to all parental references independently. Input files are fastq files for all samples, four lanes per sample and two reads per lane (Total 1,232 arrays).  In the TMPDIR, this creates a folder for each sample, with all reads aligned for each lane run. Output is three .sam files for each sample, corresponding to each species' reference genome. In the next step, these separate runs will be merged. This script is ```map_array_DT.sh ```.
+Use ```bwa mem``` to map reads from each hybrid individual to all parental references independently. Input files are fastq files for all samples, four lanes per sample and two reads per lane (Total 1,232 arrays).  In the TMPDIR, this creates a folder for each sample, with all reads aligned for each lane run. Output is three .sam files for each sample, corresponding to each species' reference genome. In the next step, these separate runs will be merged. This script is ```map_array_DT.sh ```.
 
 ```
 #!/bin/bash
@@ -104,11 +144,6 @@ bwa mem -M -R "$RG" "$genome3" "$R1" "$R2" > "${SAMPLE}.par3.sam"
 echo "Mapping complete for ${SAMPLE}"
 
 ```
-
-Started at 2:25 pm, estimated SUs:
-sbatch: 129499.42 SUs available in loni_ferrislab
-sbatch: 2016.00 SUs estimated for this job.
-sbatch: lua: Submitted job 379027
 
 It takes ~12 hours to run. So if I'm running 32 samples at a time (max allowed by HPC, also don't queue more than 100 at a time), that would be ~30 samples a day, and it would take ~10 days to do the alignment.
 
@@ -426,4 +461,40 @@ perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par2par3_transposed.tsv
 
 echo "Job Done"
 ```
+## 6. PARSE TSVs FOR PLOTTING
+Edit SBATCH FOR LONI. Output of this can be analyzed in something similar to  Banarjee et al. 2023 ```Tlalica_three-way_hybrids/local_ancestry_calling/local_ancestry_plots.R```.
 
+```
+#!/bin/bash
+#SBATCH --job-name=convert_to_tsv
+#SBATCH --output=/project/dtataru/ancestryinfer/logs/transpose_tsv_%j.out
+#SBATCH --error=/project/dtataru/ancestryinfer/logs/transpose_tsv_%j.err
+#SBATCH --qos=normal
+#SBATCH --time=24:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=20                          
+
+# Load Modules
+module load R/3.2.4
+
+# Set variables
+WORKING_DIR="work/dtataru/HMM"
+SCRIPT_DIR="/project/dtataru/ancestryinfer"
+TRANSPOSE_SCRIPT="${SCRIPT_DIR}/transpose_tsv.pl"
+PARSE_SCRIPT="${SCRIPT_DIR}/parse_3way_tsv_to_genotypes_file.pl"
+POSTERIOR_THRESH=0.8
+INTERVALS_RSCRIPT="${SCRIPT_DIR}/identify_intervals_ancestryinfer_DTv2.R"
+
+cd $WORKING_DIR
+
+### parse ancestry in transposed tsvs ###
+echo "parse transposed tsv start"
+perl $PARSE_SCRIPT Chr-01_Chr-02_Chr-03_Chr-04_Chr-05_Chr-06_Chr-07_Chr-08_Chr-09_Chr-10_Chr-11_Chr-12_Chr-13_Chr-14.tsv $POSTERIOR_THRESH > ancestry-probs_allchrs.tsv_rec.txt
+echo "all files parsed"
+
+### identify intervals ###
+echo "run intervals R script"
+Rscript $INTERVALS_RSCRIPT ancestry-probs_allchrs.tsv_rec.txt $SCRIPT_DIR
+echo "identified intervals"
+```
