@@ -55,9 +55,9 @@ Use ```bwa mem``` to map reads from each hybrid individual to all parental refer
 #SBATCH -p single
 #SBATCH -N 1            #: Number of Nodes
 #SBATCH -n 1            #: Number of Tasks per Node
-#SBATCH -A loni_ferrislab
+#SBATCH -A loni_ferrislac
 #SBATCH --cpus-per-task=12
-#SBATCH --array=41-140%32   # Job array when n is number of unique samples, % is array throttling (do 32 at a time, 8 samples)
+#SBATCH --array=1-4   # Job array when n is number of unique samples, % is array throttling (do 32 at a time, 8 samples)
 
 ### LOAD MODULES ###
 #For this step, bwa and needed
@@ -68,46 +68,37 @@ echo "Start Job"
 echo "SLURM_ARRAY_TASK_ID = ${SLURM_ARRAY_TASK_ID}"
 
 ### ASSIGN VARIABLES ARRAY SIZE > 1000 ###
+mapfile -t R1_FILE_LIST < <(ls -1 /project/dtataru/hybrids/1_hybrid1data/*R1_001.fastq.gz | sort)
+mapfile -t R2_FILE_LIST < <(ls -1 /project/dtataru/hybrids/1_hybrid1data/*R2_001.fastq.gz | sort)
 
-R1_FILE_LIST=$(ls -1 /project/dtataru/hybrids/1_hybrid1data/*R1_001.fastq.gz)
-R2_FILE_LIST=$(ls -1 /project/dtataru/hybrids/1_hybrid1data/*R2_001.fastq.gz)
+R1_FILE_LIST_SIZE=${#R1_FILE_LIST[@]}
+R2_FILE_LIST_SIZE=${#R2_FILE_LIST[@]}
+
 # check for matching read files
-R1_FILE_LIST_SIZE=$(wc -w <<<$R1_FILE_LIST)
-R2_FILE_LIST_SIZE=$(wc -w <<<$R2_FILE_LIST)
 for v in R1_FILE_LIST_SIZE R2_FILE_LIST_SIZE; do echo "Using $v=${!v}"; done
 if [ $R1_FILE_LIST_SIZE -ne $R2_FILE_LIST_SIZE ]; then
-	echo "ERROR: Encountered unmatched read files: R1_FILE_LIST_SIZE=$R1_FILE_LIST_SIZE and R2_FILE_LIST_SIZE=$R2_FILE_LIST._SIZE Exiting."
-	exit 1
+        echo "ERROR: Encountered unmatched read files: R1_FILE_LIST_SIZE=$R1_FILE_LIST_SIZE and R2_FILE_LIST_SIZE=$R2_FILE_LIST._SIZE Exiting."
+        exit 1
 fi
 
-#NUMBER_FILE_PAIRS_ALREADY_DONE=1000 
-NUMBER_FILE_PAIRS_ALREADY_DONE=0
+NUMBER_FILE_PAIRS_ALREADY_DONE=1000
+#NUMBER_FILE_PAIRS_ALREADY_DONE=0
 NUMBER_FILE_PAIRS_TODO=$(( $R1_FILE_LIST_SIZE-$NUMBER_FILE_PAIRS_ALREADY_DONE ))
 MAX_FILE_PAIRS_PER_JOB=$(( ($NUMBER_FILE_PAIRS_TODO+1000-1)/1000 ))
 for v in NUMBER_FILE_PAIRS_ALREADY_DONE NUMBER_FILE_PAIRS_TODO MAX_FILE_PAIRS_PER_JOB; do
-	echo "Using $v=${!v}"
+        echo "Using $v=${!v}"
 done
 START_FILE_INDEX=$(( $NUMBER_FILE_PAIRS_ALREADY_DONE+1+($SLURM_ARRAY_TASK_ID-1)*$MAX_FILE_PAIRS_PER_JOB))
 END_FILE_INDEX=$(( $START_FILE_INDEX+$MAX_FILE_PAIRS_PER_JOB-1 ))
 for v in START_FILE_INDEX END_FILE_INDEX; do echo "Using $v=${!v}"; done
 for FILE_INDEX in $(seq $START_FILE_INDEX $END_FILE_INDEX); do
-	echo "FILE_INDEX=$FILE_INDEX"
-	if [ $FILE_INDEX -gt $R1_FILE_LIST_SIZE ]; then
-		continue
-	fi
+        echo "FILE_INDEX=$FILE_INDEX"
+        if [ $FILE_INDEX -gt $R1_FILE_LIST_SIZE ]; then
+                continue
+        fi
 
-R1=$(cut -f $FILE_INDEX -d " "<<<$R1_FILE_LIST)
-R2=$(cut -f $FILE_INDEX -d " "<<<$R2_FILE_LIST)
-
-### ASSIGN VARIABLES ARRAY SIZE < 1000 ###
-#R1=$(find /project/dtataru/hybrids/1_hybrid1data/ \
-#    | grep R1_001.fastq.gz \
-#    | sort \
-#    | awk -v line=${SLURM_ARRAY_TASK_ID} 'line==NR')
-#R2=$(find /project/dtataru/hybrids/1_hybrid1data/ \
-#    | grep R2_001.fastq.gz \
-#    | sort \
-#    | awk -v line=${SLURM_ARRAY_TASK_ID} 'line==NR')
+R1=${R1_FILE_LIST[$((FILE_INDEX - 1))]}
+R2=${R2_FILE_LIST[$((FILE_INDEX - 1))]}
 
 SAMPLE=$(echo $R1 | cut -d "/" -f 6 | cut -d "_" -f 1-3)
 HEADER=$(echo $R1 | cut -d "/" -f 6 | cut -d "_" -f 1)
@@ -143,6 +134,8 @@ bwa mem -M -R "$RG" "$genome3" "$R1" "$R2" > "${SAMPLE}.par3.sam"
 
 echo "Mapping complete for ${SAMPLE}"
 
+done
+
 ```
 
 It takes ~12 hours to run. So if I'm running 32 samples at a time (max allowed by HPC, also don't queue more than 100 at a time), that would be ~30 samples a day, and it would take ~10 days to do the alignment.
@@ -151,11 +144,7 @@ It takes ~12 hours to run. So if I'm running 32 samples at a time (max allowed b
 
 Identify reads that do not map uniquely to parental genome and exclude them. Input is three .sam files for each sample (one per species reference), output is three sorted.pass.unique.bam for each sample. All of this takes place in each samples directory in TMPDIR, total array # is 308.
 
-```
-perl $path/run_samtools_to_hmm_threegenomes_v2.pl $current_job $genome1 $genome2 $genome3 $read_length $save_files $max_align $focal_chrom $rec_M_per_bp $path $quality\n
-```
-
-run_samtools_to_jointfiltering_DT.sh involves:
+This is the script ```run_samtools_to_jointfiltering_DT.sh```:
 
 ```
 #!/bin/bash
@@ -167,7 +156,7 @@ run_samtools_to_jointfiltering_DT.sh involves:
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH --cpus-per-task=12
-#SBATCH -A loni_ferrislab
+#SBATCH -A loni_ferrislac
 #SBATCH --array=2  # For some reason this starts at array 2
 
 ### LOAD MODULES ###
@@ -254,9 +243,9 @@ echo "Job Done"
 
 ```
 
-### 3. Variant Calling and Read Counting
+### 3. Variant Calling 
 
-Joint variant calling across all samples with bcftools, then reads matching each parental allele at ancestry informative sites are counted from a samtools mpileup file for each hybrid individual. Note, this script calls ```vcf_to_counts_non-colinear_DTv2.pl```. Input files are each of the ${SAMPLE}.par${P}.sorted.pass.unique.bam files, which are merged by parental species' genome, and output files are hybrid1 vcf counts and .bed files for each parent (3 total). This script will be called ```varcall_readcount_DT.sh```.
+Joint variant calling across all samples with bcftools, then genotype calls matching parent 1 (coordinate space) alleles at ancestry informative sites are counted from a joint samtools mpileup file. Note, this script calls ```vcf_to_counts_non-colinear_DTv3.pl```. Input files are each of the ${SAMPLE}.par${P}.sorted.pass.unique.bam files, which are merged, and output files are hybrid1 vcf counts and .bed files. Initially, I looped this through all parent files but I think it is only needed for par1. I have kept the format which can easily incorporate all parents if needed (just add for P in 1 2 3). This script will be called ```varcall_readcount_DT.sh```:
 
 ```
 #!/bin/bash
@@ -268,7 +257,7 @@ Joint variant calling across all samples with bcftools, then reads matching each
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH --cpus-per-task=12
-#SBATCH -A loni_ferrislab
+#SBATCH -A loni_ferrislac
 
 ### LOAD MODULES ###
 module load samtools/1.19
@@ -281,42 +270,65 @@ genome1="/project/dtataru/hybrids/ancestryinfer/reference_genomes/MguttatusTOL_5
 genome2="/project/dtataru/hybrids/ancestryinfer/reference_genomes/Mnasutusvar_SF_822_v2.0.fa"
 genome3="/project/dtataru/hybrids/ancestryinfer/reference_genomes/WLF47.fasta"
 
+P=$(find /work/dtataru/TMPDIR/ -type d | sort | awk -v line=${SLURM_ARRAY_TASK_ID} 'line==NR')
+SAMPLE=$(echo $P | cut -d "/" -f 6 | cut -d "." -f 1)
+
 PATH_SCRIPTS="/project/dtataru/ancestryinfer"
 AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
-WORKDIR="/work/dtataru/HMM_INPUT"
+AIM_COUNTS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.txt"
+WORKDIR="/work/dtataru/HYBRIDS/HMM_INPUT"
 BAMDIR="/work/dtataru/TMPDIR"
 THREADS=20
 
+### CHECK BAM FILES FOR CORRUPTION ###
+#script will fail if there are corrupt bams
+echo "Checking BAM files for corruption or emptiness..."
+CORRUPT_COUNT=0
+
+for f in /work/dtataru/TMPDIR/*/*.sorted.pass.unique.bam; do
+    if ! samtools quickcheck -v "$f"; then
+        echo "Corrupt or empty file detected: $f"
+        CORRUPT_COUNT=$((CORRUPT_COUNT+1))
+    fi
+done
+
+if [ $CORRUPT_COUNT -gt 0 ]; then
+    echo "ERROR: Found $CORRUPT_COUNT corrupt or empty BAM files. Exiting job."
+    exit 1
+else
+    echo "All BAM files passed samtools quickcheck."
+fi
+
 ### MERGE ALL BAMS FOR VARIANT CALLING ###
+echo "Merge BAM files"
 cd "$BAMDIR"
 
-for P in 1 2 3; do
+for P in 1; do
     BAM_FILES=("${BAMDIR}/*.par${P}.sorted.pass.unique.bam)
 	MERGED="${WORKDIR}/hybrids1merged.par${P}.pass.unique.bam"
 	SORTED="${WORKDIR}/hybrids1merged.par${P}.sorted.pass.unique.bam"
 
-   for BAM in "${BAM_FILES[@]}"; do
-        samtools merge -r -c -p -@ ${THREADS} $MERGED "${BAM_FILES[@]}
-    done
-
-	samtools sort -@ 12 -o $SORTED $MERGED
-	samtools index $SORTED
+   	samtools merge -r -c -p -@ ${THREADS} "$MERGED" "${BAM_FILES[@]}"
+	samtools sort -@ 12 -o "$SORTED" "$MERGED"
+	samtools index "$SORTED"
 done
+echo "BAM files merged"
 
 ### VARIANT CALLING ###
 echo "start variant calling"
 
 cd "$WORKDIR"
 
-for P in 1 2 3; do
+for P in 1; do
     GENOME_VAR="genome${P}"
     GENOME=${!GENOME_VAR}
+	SORTED="${WORKDIR}/hybrids1merged.par${P}.sorted.pass.unique.bam"
     BCF="hybrids1.par${P}.bcf"
     VCF="hybrids1.par${P}.vcf.gz"
 
-    bcftools mpileup -r -f $GENOME -o $BCF $SORTED
-    bcftools call -mO z -o $VCF $BCF
-    gunzip $VCF
+	bcftools mpileup -r -f "$GENOME" -o "$BCF" "$SORTED"
+    bcftools call -mO z -o "$VCF" "$BCF"
+    gunzip "$VCF"
 done
 
 echo "finished variant calling"
@@ -324,18 +336,34 @@ echo "finished variant calling"
 ### GENERATE HMM INPUT FILES ###
 echo "start generating hmm input"
 
-for P in 1 2 3; do
+for P in 1; do
     VCF="hybrids1.par${P}.vcf"
     COUNTS="${VCF}_counts"
-    perl $PATH_SCRIPTS/vcf_to_counts_non-colinear_DTv2.pl $VCF $AIMS $PATH_SCRIPTS
+    perl $PATH_SCRIPTS/vcf_to_counts_non-colinear_DTv3.pl $VCF $AIMS $PATH_SCRIPTS
     cat $COUNTS | perl -p -e 's/_/\t/g' | \
         awk -v OFS='\t' '{print $1, $2-1, $2, $4, $5, $6}' > ${COUNTS}.bed
 done
 
+### AIMS TO COUNTS ###
+#aims produced empty counts, running a new version
+VCF="hybrids1.par1.vcf"
+INFILE_AIMS="${VCF}.aims"
+COUNTS="${VCF}_counts"
+AIMS_BED="${AIMS}.mod.bed"
+COUNTS_BED="${COUNTS}.bed"
+
+perl "${PATH_SCRIPTS}/vcf_to_counts_non-colinear_DTv4.pl"  "$INFILE_AIMS" "$COUNTS"
+cat "$COUNTS" | perl -p -e 's/_/\\t/g' | awk -v OFS='\\t' '\$1=\$1\"\\t\"\$2' > "$COUNTS_BED"
+
+### COUNTS TO HMM INPUT ###
+#note, vcf_counts_to_hmmv3.pl is very different from v1 and v2, written for a multi-sample file
+#sets recombination rate at beginning of chromosome to 0, output has 595 columns
+perl vcf_counts_to_hmmv3.pl "$COUNTS_BED" "$AIM_COUNTS" 0.00000002 > "${COUNTS}.hmmsites1"
+
 echo "Job Done"
 ```
 
-### 4. Thinning to one AIM per read across individuals
+### Thinning to one AIM per read across individuals (DO NOT RUN)
 
 Counts for each parental allele at ancestry informative sites are subsampled to thin to one ancestry informative site per read if multiple sites occur within one read. This thinning is performed jointly across individuals such that the same site is retained for all individuals in the dataset. This I will call ```counts_to_hmm_DT.sh```:
 
@@ -395,7 +423,7 @@ echo "Job Done"
 
 ```
 
-### 5. AncestryHMM
+### 4. AncestryHMM
 
 Run main ancestryhmm program.
 
@@ -405,11 +433,11 @@ Run main ancestryhmm program.
 #SBATCH --output=/project/dtataru/ancestryinfer/logs/ancestryhmm_%j.out
 #SBATCH --error=/project/dtataru/ancestryinfer/logs/ancestryhmm__%j.err
 #SBATCH --time=3-00:00:00
-#SBATCH -p single
+#SBATCH -p bigmem
 #SBATCH -N 1
-#SBATCH -n 1
+##SBATCH -n 4
 #SBATCH --cpus-per-task=12
-#SBATCH -A loni_ferrislab
+#SBATCH -A loni_ferrislac
 
 ### LOAD MODULES ###
 module load python/3.11.5-anaconda
@@ -419,50 +447,65 @@ module load gsl/2.7.1/intel-2021.5.0
 module load r/4.4.1
 eval "$(conda shell.bash hook)"
 conda activate /home/dtataru/.conda/envs/ancestryinfer
+export PATH=$PATH:/project/dtataru/ancestryinfer/Ancestry_HMM/src
+export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:$LD_LIBRARY_PATH
 
 ### ASSIGN VARIABLES ###
 PATH_SCRIPTS="/project/dtataru/ancestryinfer"
 AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
-WORKDIR="/work/dtataru/TMPDIR/HMM_OUTPUT"
-INPUTDIR="/work/dtataru/TMPDIR/HMM_OUTPUT"
+WORKDIR="/work/dtataru/HYBRIDS/HMM_INPUT"
+HYB_AIM_COUNTS="${WORKDIR}/hybrids1.par1.vcf_counts.hmmsites1"
+HYBFILE="${WORKDIR}/HMM.hybrid.files.list"
+PARFILE="${WORKDIR}/HMM.parental.files.list"
 
-HYBFILE="${INPUTDIR}/hybrid.files.list"
-PARFILE="${INPUTDIR}/parental.files.list"
 INITIAL_ADMIX=0.33
 INITIAL_ADMIX2=0.33
+PAR1_PRIOR=0.33
+PAR2_PRIOR=0.33
+PAR3_PRIOR=0.34
 READ_LENGTH=100
 ERROR_PRIOR=0.02
 SAVE_FILES="save_all"
-AIMS_TRUEBED="${AIMS}.mod.bed"
-AIMS_BED="${AIMS}.mod"
-FOCAL_CHROM_LIST=""
+FOCAL_CHROM_LIST="/project/dtataru/BWB/ancestryinfer/focal_chrom_list.txt"
+TAG=$(paste -sd "_" "$FOCAL_CHROM_LIST")
 
-echo "Working directory: $WORKDIR"
 cd $WORKDIR
+echo "Running 3-way AncestryHMM on ${HYB_AIM_COUNTS}"
 
 ### RUN HMM ###
-echo "run HMM"
-
-perl ${PATH_SCRIPTS}/combine_all_individuals_hmm_3way_v1.pl ${PARFILE} ${HYBFILE} ${INITIAL_ADMIX} ${INITIAL_ADMIX2} AIMs_panel15_final.AIMs_counts.txt 0 0 ${FOCAL_CHROM_LIST} ${READ_LENGTH} ${ERROR_PRIOR} 
-
-perl ${PATH_SCRIPTS}/convert_rchmm_to_ancestry_tsv_3way_v1.pl current.samples.list current.samples.read.list 1 ${FOCAL_CHROM_LIST}
+echo "Creating current.samples.list file"
+ls ${WORKDIR}/*_counts | sed 's/\_counts//g' > current.samples.list
+echo "Run HMM"
+ancestry_hmm -a 3 \
+    $PAR1_PRIOR $PAR2_PRIOR $PAR3_PRIOR \
+    -p 0 -10000 $PAR1_PRIOR \
+    -p 1 $INITIAL_ADMIX $PAR2_PRIOR \
+    -p 2 $INITIAL_ADMIX2 $PAR3_PRIOR \
+    -e $ERROR_PRIOR \
+    -s current.samples.list \
+    -i ${HYB_AIM_COUNTS} \
+    --tolerance 1e-3
 
 echo "HMM Done"
 
-### TRANSPOSE OUTPUT ###
-echo "Run Transpose"
+### CONVERT TO TSV ###
 
+echo "Converting output"
+perl ${PATH_SCRIPTS}/convert_rchmm_to_ancestry_tsv_3way_v1.pl current.samples.list current.samples.list 1 ${FOCAL_CHROM_LIST}
+
+echo "Transposing ancestry probabilities"
 perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par1_transposed.tsv
 perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par2_transposed.tsv
 perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par3_transposed.tsv
 perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par1par2_transposed.tsv
 perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par1par3_transposed.tsv
-perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par2par3_transposed.tsv
+perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-pcrobs-par2par3_transposed.tsv
 
 echo "Job Done"
 ```
+
 ## 6. PARSE TSVs FOR PLOTTING
-Edit SBATCH FOR LONI. Output of this can be analyzed in something similar to  Banarjee et al. 2023 ```Tlalica_three-way_hybrids/local_ancestry_calling/local_ancestry_plots.R```.
+Edit SBATCH FOR LONI. Output of this can be analyzed in something similar to  Banarjee et al. 2023's```Tlalica_three-way_hybrids/local_ancestry_calling/local_ancestry_plots.R```.
 
 ```
 #!/bin/bash
@@ -479,7 +522,7 @@ Edit SBATCH FOR LONI. Output of this can be analyzed in something similar to  Ba
 module load R/3.2.4
 
 # Set variables
-WORKING_DIR="work/dtataru/HMM"
+WORKING_DIR="work/dtataru/HYBRIDS/HMM_INPUT"
 SCRIPT_DIR="/project/dtataru/ancestryinfer"
 TRANSPOSE_SCRIPT="${SCRIPT_DIR}/transpose_tsv.pl"
 PARSE_SCRIPT="${SCRIPT_DIR}/parse_3way_tsv_to_genotypes_file.pl"
