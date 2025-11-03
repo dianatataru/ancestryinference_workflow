@@ -482,6 +482,7 @@ ancestry_hmm -a 3 \
     -p 1 $INITIAL_ADMIX $PAR2_PRIOR \
     -p 2 $INITIAL_ADMIX2 $PAR3_PRIOR \
     -e $ERROR_PRIOR \
+	-g \
     -s current.samples.list \
     -i ${HYB_AIM_COUNTS} \
     --tolerance 1e-3
