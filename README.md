@@ -363,69 +363,10 @@ perl vcf_counts_to_hmmv3.pl "$COUNTS_BED" "$AIM_COUNTS" 0.00000002 > "${COUNTS}.
 echo "Job Done"
 ```
 
-### Thinning to one AIM per read across individuals (DO NOT RUN)
-
-Counts for each parental allele at ancestry informative sites are subsampled to thin to one ancestry informative site per read if multiple sites occur within one read. This thinning is performed jointly across individuals such that the same site is retained for all individuals in the dataset. This I will call ```counts_to_hmm_DT.sh```:
-
-```
-#!/bin/bash
-#SBATCH --job-name=counts_to_hmm
-#SBATCH --output=/project/dtataru/ancestryinfer/logs/counts_to_hmm_%j.out
-#SBATCH --error=/project/dtataru/ancestryinfer/logs/counts_to_hmm__%j.err
-#SBATCH --time=3-00:00:00
-#SBATCH -p single
-#SBATCH -N 1
-#SBATCH -n 1
-#SBATCH --cpus-per-task=12
-#SBATCH -A loni_ferrislab
-
-### LOAD MODULES ###
-module load samtools/1.19
-module load bcftools/1.18
-eval "$(conda shell.bash hook)"
-conda activate /home/dtataru/.conda/envs/ancestryinfer
-
-### ASSIGN VARIABLES ###
-PATH_SCRIPTS="/project/dtataru/ancestryinfer"
-AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
-WORKDIR="/work/dtataru/TMPDIR/HMM_INPUT"
-
-echo "Working in WORKDIR: $WORKDIR"
-cd $WORKDIR
-
-### REFORMAT AIMs FILE ###
-echo "Reformatting AIMs file..."
-AIMS_BED="${AIMS}.mod"
-AIMS_TRUEBED="${AIMS}.mod.bed"
-
-# Convert underscores to tabs, then reassemble chromosome_position as first column
-cat "$AIMS" | perl -pe 's/_/\t/g' | awk -v OFS='\t' '{print $1"_"$2, $0}' > "$AIMS_BED"
-
-# Same as above but also make a BED-style version with separate chrom and position columns
-cat "$AIMS" | perl -pe 's/_/\t/g' | awk -v OFS='\t' '{print $1, $2, $0}' > "$AIMS_TRUEBED"
-
-### RUN COUNTS TO HMM INPUT ###
-echo "Calling AIMs from counts"
-for P in 1 2 3; do
-    VCF="hybrids1.par${P}.vcf"
-    COUNTS="${VCF}_counts"
-	perl ${PATH_SCRIPTS}/vcf_counts_to_hmmv2.pl $COUNTS $AIMS 0.00000002 $PATH_SCRIPTS
-done
-
-### MAKE INPUT LISTS FOR HMM ###
-#hybfile="HMM.hybrid.files.list"
-#parfile="HMM.parental.files.list"
-
-#echo "/work/dtataru/TMPDIR/HMM_INPUT/*.hmm.pass.formatted" > $hybfile
-#echo "/work/dtataru/TMPDIR/HMM_INPUT/*.hmm.parental.format" > $parfile
-
-echo "Job Done"
-
-```
 
 ### 4. AncestryHMM
 
-Run main ancestryhmm program.
+Run main ancestryhmm program. Because ancestryinfer uses read counts instead of genotype calls, there is a step in between these in that wrapper that thin to one AIM per read for each individual, to account for non-independence. Because we are using genotype calls (-g), this is not necessary. 
 
 ```
 #!/bin/bash
@@ -505,19 +446,19 @@ perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-pcrobs-par2par3_transposed.tsv
 echo "Job Done"
 ```
 
-## 6. PARSE TSVs FOR PLOTTING
-Edit SBATCH FOR LONI. Output of this can be analyzed in something similar to  Banarjee et al. 2023's```Tlalica_three-way_hybrids/local_ancestry_calling/local_ancestry_plots.R```.
+## 5. PARSE TSVs FOR PLOTTING
+Parsing ancestry from the output tsvs for downstream analysis and visualization. Output of this can be analyzed in something similar to  Banarjee et al. 2023's```Tlalica_three-way_hybrids/local_ancestry_calling/local_ancestry_plots.R```.
 
 ```
 #!/bin/bash
 #SBATCH --job-name=convert_to_tsv
 #SBATCH --output=/project/dtataru/ancestryinfer/logs/transpose_tsv_%j.out
 #SBATCH --error=/project/dtataru/ancestryinfer/logs/transpose_tsv_%j.err
-#SBATCH --qos=normal
-#SBATCH --time=24:00:00
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=20                          
+#SBATCH --time=1-00:00:00
+#SBATCH -p single
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -A loni_ferrislac                      
 
 # Load Modules
 module load R/3.2.4
