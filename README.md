@@ -245,7 +245,14 @@ echo "Job Done"
 
 ### 3. Variant Calling 
 
-Joint variant calling across all samples with bcftools, then genotype calls matching parent 1 (coordinate space) alleles at ancestry informative sites are counted from a joint samtools mpileup file. Note, this script calls ```vcf_to_counts_non-colinear_DTv3.pl```. Input files are each of the ${SAMPLE}.par${P}.sorted.pass.unique.bam files, which are merged, and output files are hybrid1 vcf counts and .bed files. Initially, I looped this through all parent files but I think it is only needed for par1. I have kept the format which can easily incorporate all parents if needed (just add for P in 1 2 3). This script will be called ```varcall_readcount_DT.sh```:
+Joint variant calling across all samples with bcftools, then genotype calls matching parent 1 (coordinate space) alleles at ancestry informative sites are counted from a joint samtools mpileup file. Note, this script calls ```vcf_to_counts_non-colinear_DTv3.pl```. Input files are each of the ${SAMPLE}.par${P}.sorted.pass.unique.bam files, which are merged, and output files are hybrid1 vcf counts and .bed files. Initially, I looped this through all parent files but I think it is only needed for par1. I have kept the format which can easily incorporate all parents if needed (just add for P in 1 2 3). The script will fail if there are empty or corrupt bams. Somehow, everytime I have run Step 2 empty hidden files have been created in the directory, so before running remove those:
+
+```
+rm /work/dtataru/TMPDIR/.par1.sorted.pass.unique.bam
+rm /work/dtataru/TMPDIR/.par2.sorted.pass.unique.bam
+rm /work/dtataru/TMPDIR/.par3.sorted.pass.unique.bam
+```
+Then run the script called ```varcall_readcount_DT.sh```:
 
 ```
 #!/bin/bash
