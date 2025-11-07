@@ -289,29 +289,29 @@ THREADS=20
 
 ### CHECK BAM FILES FOR CORRUPTION ###
 #script will fail if there are corrupt bams
-echo "Checking BAM files for corruption or emptiness..."
-CORRUPT_COUNT=0
+#echo "Checking BAM files for corruption or emptiness..."
+#CORRUPT_COUNT=0
 
-for f in /work/dtataru/TMPDIR/*/*.sorted.pass.unique.bam; do
-    if ! samtools quickcheck -v "$f"; then
-        echo "Corrupt or empty file detected: $f"
-        CORRUPT_COUNT=$((CORRUPT_COUNT+1))
-    fi
-done
+#for f in /work/dtataru/TMPDIR/*/*.sorted.pass.unique.bam; do
+#    if ! samtools quickcheck -v "$f"; then
+#        echo "Corrupt or empty file detected: $f"
+#        CORRUPT_COUNT=$((CORRUPT_COUNT+1))
+#    fi
+#done
 
-if [ $CORRUPT_COUNT -gt 0 ]; then
-    echo "ERROR: Found $CORRUPT_COUNT corrupt or empty BAM files. Exiting job."
-    exit 1
-else
-    echo "All BAM files passed samtools quickcheck."
-fi
+#if [ $CORRUPT_COUNT -gt 0 ]; then
+#    echo "ERROR: Found $CORRUPT_COUNT corrupt or empty BAM files. Exiting job."
+#    exit 1
+#else
+#    echo "All BAM files passed samtools quickcheck."
+#fi
 
 ### MERGE ALL BAMS FOR VARIANT CALLING ###
 echo "Merge BAM files"
 cd "$BAMDIR"
 
 for P in 1; do
-    BAM_FILES=("${BAMDIR}/*.par${P}.sorted.pass.unique.bam)
+    BAM_FILES=(${BAMDIR}/*.par${P}.sorted.pass.unique.bam)
 	MERGED="${WORKDIR}/hybrids1merged.par${P}.pass.unique.bam"
 	SORTED="${WORKDIR}/hybrids1merged.par${P}.sorted.pass.unique.bam"
 
