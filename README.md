@@ -284,7 +284,7 @@ PATH_SCRIPTS="/project/dtataru/ancestryinfer"
 AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
 AIM_COUNTS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.txt"
 WORKDIR="/work/dtataru/HYBRIDS/HMM_INPUT"
-BAMDIR="/work/dtataru/TMPDIR"
+BAMDIR="/work/dtataru/TMPDIR/"
 THREADS=20
 
 ### CHECK BAM FILES FOR CORRUPTION ###
@@ -311,7 +311,7 @@ echo "Merge BAM files"
 cd "$BAMDIR"
 
 for P in 1; do
-    BAM_FILES=(${BAMDIR}/*.par${P}.sorted.pass.unique.bam)
+	BAM_FILES=($(find "$BAMDIR" -type f -name "*.par${P}.sorted.pass.unique.bam" | sort))
 	MERGED="${WORKDIR}/hybrids1merged.par${P}.pass.unique.bam"
 	SORTED="${WORKDIR}/hybrids1merged.par${P}.sorted.pass.unique.bam"
 
@@ -343,16 +343,7 @@ echo "finished variant calling"
 ### GENERATE HMM INPUT FILES ###
 echo "start generating hmm input"
 
-for P in 1; do
-    VCF="hybrids1.par${P}.vcf"
-    COUNTS="${VCF}_counts"
-    perl $PATH_SCRIPTS/vcf_to_counts_non-colinear_DTv3.pl $VCF $AIMS $PATH_SCRIPTS
-    cat $COUNTS | perl -p -e 's/_/\t/g' | \
-        awk -v OFS='\t' '{print $1, $2-1, $2, $4, $5, $6}' > ${COUNTS}.bed
-done
-
 ### AIMS TO COUNTS ###
-#aims produced empty counts, running a new version
 VCF="hybrids1.par1.vcf"
 INFILE_AIMS="${VCF}.aims"
 COUNTS="${VCF}_counts"
