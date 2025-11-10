@@ -160,8 +160,8 @@ This is the script ```run_samtools_to_jointfiltering_DT.sh```:
 #SBATCH --array=2  # For some reason this starts at array 2
 
 ### LOAD MODULES ###
-module load samtools/1.19
-module load bcftools/1.18
+#module load samtools/1.19
+#module load bcftools/1.18
 eval "$(conda shell.bash hook)"
 conda activate /home/dtataru/.conda/envs/ancestryinfer
 
@@ -252,7 +252,7 @@ rm /work/dtataru/TMPDIR/.par1.sorted.pass.unique.bam
 rm /work/dtataru/TMPDIR/.par2.sorted.pass.unique.bam
 rm /work/dtataru/TMPDIR/.par3.sorted.pass.unique.bam
 ```
-Then run the script called ```varcall_readcount_DT.sh```:
+Also, there were three "Bad bams", GBG10, HHH46, and SHG11, which I move to the BAD_BAMS folder to be able to merge the other bams. Then run the script called ```varcall_readcount_DT.sh```:
 
 ```
 #!/bin/bash
