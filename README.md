@@ -307,36 +307,32 @@ THREADS=20
 #fi
 
 ### MERGE ALL BAMS FOR VARIANT CALLING ###
-echo "Merge BAM files"
-cd "$BAMDIR"
+#echo "Merge BAM files"
+#cd "$BAMDIR"
 
-for P in 1; do
-	BAM_FILES=($(find "$BAMDIR" -type f -name "*.par${P}.sorted.pass.unique.bam" | sort))
-	MERGED="${WORKDIR}/hybrids1merged.par${P}.pass.unique.bam"
-	SORTED="${WORKDIR}/hybrids1merged.par${P}.sorted.pass.unique.bam"
+#for P in 1; do
+#	BAM_FILES=($(find "$BAMDIR" -type f -name "*.par${P}.sorted.pass.unique.bam" | sort))
+#	MERGED="${WORKDIR}/hybrids1merged.par${P}.pass.unique.bam"
+#	SORTED="${WORKDIR}/hybrids1merged.par${P}.sorted.pass.unique.bam"
 
-   	samtools merge -r -c -p -@ ${THREADS} "$MERGED" "${BAM_FILES[@]}"
-	samtools sort -@ 12 -o "$SORTED" "$MERGED"
-	samtools index "$SORTED"
-done
-echo "BAM files merged"
+#   	samtools merge -r -c -p -@ ${THREADS} "$MERGED" "${BAM_FILES[@]}"
+#	samtools sort -@ 12 -o "$SORTED" "$MERGED"
+#	samtools index "$SORTED"
+#done
+#echo "BAM files merged"
 
 ### VARIANT CALLING ###
 echo "start variant calling"
 
 cd "$WORKDIR"
 
-for P in 1; do
-    GENOME_VAR="genome${P}"
-    GENOME=${!GENOME_VAR}
-	SORTED="${WORKDIR}/hybrids1merged.par${P}.sorted.pass.unique.bam"
-    BCF="hybrids1.par${P}.bcf"
-    VCF="hybrids1.par${P}.vcf.gz"
+BAM_FILE="${WORKDIR}/hybrids1merged.par1.sorted.pass.unique.bam"
+MPILEUP="hybrids1.par1.bcf"
+VCF="hybrids1.par1.vcf.gz"
 
-	bcftools mpileup -r -f "$GENOME" -o "$BCF" "$SORTED"
-    bcftools call -mO z -o "$VCF" "$BCF"
-    gunzip "$VCF"
-done
+bcftools mpileup -f "$genome1" -o "$MPILEUP" "$BAM_FILE"
+bcftools call -mO z -o "$VCF" "$MPILEUP"
+gunzip "$VCF"
 
 echo "finished variant calling"
 
