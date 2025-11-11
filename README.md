@@ -346,7 +346,9 @@ COUNTS="${VCF}_counts"
 AIMS_BED="${AIMS}.mod.bed"
 COUNTS_BED="${COUNTS}.bed"
 
-perl "${PATH_SCRIPTS}/vcf_to_counts_non-colinear_DTv4.pl"  "$INFILE_AIMS" "$COUNTS"
+perl "${PATH_SCRIPTS}/vcf_to_counts_non-colinear_DTv3.pl" $VCF $AIMS $PATH_SCRIPTS
+#if the output.aims file produces an empty output, run the next line
+#perl "${PATH_SCRIPTS}/vcf_to_counts_non-colinear_DTv4.pl"  "$INFILE_AIMS" "$COUNTS"
 cat "$COUNTS" | perl -p -e 's/_/\\t/g' | awk -v OFS='\\t' '\$1=\$1\"\\t\"\$2' > "$COUNTS_BED"
 
 ### COUNTS TO HMM INPUT ###
