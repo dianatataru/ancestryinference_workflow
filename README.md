@@ -328,11 +328,13 @@ cd "$WORKDIR"
 
 BAM_FILE="${WORKDIR}/hybrids1merged.par1.sorted.pass.unique.bam"
 MPILEUP="hybrids1.par1.bcf"
-VCF="hybrids1.par1.vcf.gz"
+VCF="hybrids1.par1.maxdepth6000.vcf.gz"
 
-bcftools mpileup -f "$genome1" -o "$MPILEUP" "$BAM_FILE"
-bcftools call -mO z -o "$VCF" "$MPILEUP"
-gunzip "$VCF"
+#bcftools mpileup -f "$genome1" -o "$MPILEUP" "$BAM_FILE"
+#bcftools call -mO z -o "$VCF" "$MPILEUP"
+#gunzip "$VCF"
+#change to pipe through bcf and set max read depth higher
+bcftools mpileup -Ou -d 6000 -f "$genome1" "$BAM_FILE" | bcftools call -m -Ov -o "$VCF"
 
 echo "finished variant calling"
 
@@ -340,7 +342,7 @@ echo "finished variant calling"
 echo "start generating hmm input"
 
 ### AIMS TO COUNTS ###
-VCF="hybrids1.par1.vcf"
+VCF="hybrids1.par1.maxdepth6000.vcf"
 INFILE_AIMS="${VCF}.aims"
 COUNTS="${VCF}_counts"
 AIMS_BED="${AIMS}.mod.bed"
@@ -358,7 +360,7 @@ perl vcf_counts_to_hmmv3.pl "$COUNTS_BED" "$AIM_COUNTS" 0.00000002 > "${COUNTS}.
 
 echo "Job Done"
 ```
-
+In this script, the I changed the mpileup step from this to what is current, because default max-depth is 250 and that is way too low for 308 samples at 
 
 ### 4. AncestryHMM
 
