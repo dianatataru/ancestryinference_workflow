@@ -321,34 +321,60 @@ THREADS=20
 #done
 #echo "BAM files merged"
 
+```
+In this script, the I changed the mpileup step from this to what is current, because default max-depth is 250 and that is way too low for 308 samples at 23x. It timed out after 3 days of trying to make it, though. Now I am going to run a second script for variant calling that runs an array by chromosomeRunning variant calling by chromosome
+
+```
+#!/bin/bash
+#SBATCH --job-name=varcall
+#SBATCH --output=/project/dtataru/ancestryinfer/logs/varcall_%j.out
+#SBATCH --error=/project/dtataru/ancestryinfer/logs/varcall_%j.err
+#SBATCH --time=3-00:00:00
+#SBATCH -p single
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH --cpus-per-task=24
+#SBATCH -A loni_ferrislac
+#SBATCH --array=1-14       
+#SBATCH --mem=32G
+
+module load bcftools
+module load samtools
+
+### ASSIGN VARIABLES ###
+PATH_SCRIPTS="/project/dtataru/ancestryinfer"
+genome1="/project/dtataru/hybrids/ancestryinfer/reference_genomes/MguttatusTOL_551_v5.0.fa"
+WORKDIR="/work/dtataru/HYBRIDS/HMM_INPUT"
+BAM_FILE="${WORKDIR}/hybrids1merged.par1.sorted.pass.unique.bam"
+FOCAL_CHROM_LIST="/project/dtataru/BWB/ancestryinfer/focal_chrom_list.txt"
+CHR=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$FOCAL_CHROM_LIST")
+OUTVCF="hybrids1.par1.maxdepth6000.${CHR}.vcf"
+
 ### VARIANT CALLING ###
 echo "start variant calling"
 
 cd "$WORKDIR"
 
-BAM_FILE="${WORKDIR}/hybrids1merged.par1.sorted.pass.unique.bam"
-MPILEUP="hybrids1.par1.bcf"
-VCF="hybrids1.par1.maxdepth6000.vcf.gz"
+#exit if vcf already exists
+if [[ -s "$OUTVCF" ]]; then
+    echo "Output exists, skipping: $OUTVCF"
+    exit 0
+fi
 
-#bcftools mpileup -f "$genome1" -o "$MPILEUP" "$BAM_FILE"
-#bcftools call -mO z -o "$VCF" "$MPILEUP"
-#gunzip "$VCF"
-#change to pipe through bcf and set max read depth higher
-bcftools mpileup -Ou -d 6000 -f "$genome1" "$BAM_FILE" | bcftools call -m -Ov -o "$VCF"
-
-echo "finished variant calling"
+bcftools mpileup -Ou -d 6000 -r "$CHR" -f "$genome1" "$BAM_FILE" | bcftools call -m -Ov -o "$OUTVCF"
 
 ### GENERATE HMM INPUT FILES ###
 echo "start generating hmm input"
 
 ### AIMS TO COUNTS ###
-VCF="hybrids1.par1.maxdepth6000.vcf"
-INFILE_AIMS="${VCF}.aims"
-COUNTS="${VCF}_counts"
+INFILE_AIMS="${OUTVCF}.aims"
+COUNTS="${OUTVCF}_counts"
+AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
+AIM_COUNTS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.txt"
 AIMS_BED="${AIMS}.mod.bed"
 COUNTS_BED="${COUNTS}.bed"
 
-perl "${PATH_SCRIPTS}/vcf_to_counts_non-colinear_DTv3.pl" $VCF $AIMS $PATH_SCRIPTS
+perl "${PATH_SCRIPTS}/vcf_to_counts_non-colinear_DTv3.pl" $OUTVCF $AIMS $PATH_SCRIPTS
 #if the output.aims file produces an empty output, run the next line
 #perl "${PATH_SCRIPTS}/vcf_to_counts_non-colinear_DTv4.pl"  "$INFILE_AIMS" "$COUNTS"
 cat "$COUNTS" | perl -p -e 's/_/\\t/g' | awk -v OFS='\\t' '\$1=\$1\"\\t\"\$2' > "$COUNTS_BED"
@@ -358,9 +384,7 @@ cat "$COUNTS" | perl -p -e 's/_/\\t/g' | awk -v OFS='\\t' '\$1=\$1\"\\t\"\$2' > 
 #sets recombination rate at beginning of chromosome to 0, output has 595 columns
 perl vcf_counts_to_hmmv3.pl "$COUNTS_BED" "$AIM_COUNTS" 0.00000002 > "${COUNTS}.hmmsites1"
 
-echo "Job Done"
 ```
-In this script, the I changed the mpileup step from this to what is current, because default max-depth is 250 and that is way too low for 308 samples at 
 
 ### 4. AncestryHMM
 
