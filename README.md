@@ -449,7 +449,7 @@ cd $WORKDIR
 #bcftools query -l hybrids1.par1.maxdepth6000.Chr-01.vcf > current.samples.list
 
 SAMPLE_ID=$SLURM_ARRAY_TASK_ID
-SAMPLE_NAME=$(sed -n "${SAMPLE_ID}p" current.samples.list | awk '{print $1}')
+SAMPLE_NAME=$(sed -n "${SAMPLE_ID}p" "${INPUTDIR}/current.samples.list" | awk '{print $1}')
 echo "Processing SAMPLE: $SAMPLE_NAME    SAMPLE_ID=$SAMPLE_ID"
 
 ### RUN HMM ###
