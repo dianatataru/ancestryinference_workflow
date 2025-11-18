@@ -349,6 +349,7 @@ BAM_FILE="${WORKDIR}/hybrids1merged.par1.sorted.pass.unique.bam"
 FOCAL_CHROM_LIST="/project/dtataru/BWB/ancestryinfer/focal_chrom_list.txt"
 CHR=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$FOCAL_CHROM_LIST")
 OUTVCF="hybrids1.par1.maxdepth6000.${CHR}.vcf"
+PATH_SCRIPTS="/project/dtataru/ancestryinfer"
 
 ### VARIANT CALLING ###
 echo "start variant calling"
