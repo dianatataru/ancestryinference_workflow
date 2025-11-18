@@ -410,9 +410,7 @@ total 194,230 sites
 
 ### 4. AncestryHMM
 
-Run main ancestryhmm program. Because ancestryinfer uses read counts instead of genotype calls, there is a step in between these in that wrapper that thin to one AIM per read for each individual, to account for non-independence. Because we are using genotype calls (-g), this is not necessary. 
-
-First make a current.samples.list
+Run main ancestryhmm program. Because ancestryinfer uses read counts instead of genotype calls, there is a step in between these in that wrapper that thin to one AIM per read for each individual, to account for non-independence. Because we are using genotype calls (-g), this is not necessary. Calling this ```run_hmm_DT.sh ```:
 
 ```
 #!/bin/bash
@@ -424,6 +422,7 @@ First make a current.samples.list
 #SBATCH -N 1
 #SBATCH --cpus-per-task=12
 #SBATCH -A loni_ferrislac
+#SBATCH --array=1             # one task = one sample
 
 ### LOAD MODULES ###
 module load python/3.11.5-anaconda
@@ -439,13 +438,15 @@ export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:$LD_LIBRARY_PATH
 ### ASSIGN VARIABLES ###
 PATH_SCRIPTS="/project/dtataru/ancestryinfer"
 AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
-WORKDIR="/work/dtataru/HYBRIDS/HMM_INPUT"
+INPUTDIR="/work/dtataru/HYBRIDS/HMM_INPUT"
+WORKDIR="/work/dtataru/HYBRIDS/HMM_OUTPUT"
 FOCAL_CHROM_LIST="/project/dtataru/BWB/ancestryinfer/focal_chrom_list.txt"
 cd $WORKDIR
 
 ### SAMPLE INFO ###
-echo "Creating current.samples.list file"
-bcftools query -l hybrids1.par1.maxdepth6000.Chr-01.vcf > current.samples.list
+#only create this sample list once
+#echo "Creating current.samples.list file"
+#bcftools query -l hybrids1.par1.maxdepth6000.Chr-01.vcf > current.samples.list
 
 SAMPLE_ID=$SLURM_ARRAY_TASK_ID
 SAMPLE_NAME=$(sed -n "${SAMPLE_ID}p" current.samples.list | awk '{print $1}')
@@ -458,7 +459,7 @@ while read CHROM; do
 
     echo "  → Processing chromosome $CHROM"
 
-    INPUT="${WORKDIR}/hybrids1.par1.maxdepth6000.${CHROM}.vcf_counts.hmmsites1"
+    INPUT="${INPUTDIR}/hybrids1.par1.maxdepth6000.${CHROM}.vcf_counts.hmmsites1"
 
     ### DETERMINE SAMPLE COLUMNS ###
     A_col=$((10 + (SAMPLE_ID-1)*2))
@@ -466,7 +467,7 @@ while read CHROM; do
 
     echo "     Sample columns: A=$A_col   a=$a_col"
 
-    OUTFILE="${SAMPLE_NAME}.${CHROM}.counts.hmmsites1"
+    OUTFILE="${WORKDIR}/${SAMPLE_NAME}.${CHROM}.counts.hmmsites1"
 
     ### Extract first 9 columns + sample's two genotype columns ###
     awk -v A=$A_col -v a=$a_col -v OFS="\t" \
