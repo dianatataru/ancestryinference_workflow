@@ -387,19 +387,41 @@ perl "${PATH_SCRIPTS}/vcf_counts_to_hmmv3.pl" "$COUNTS_BED" "$AIM_COUNTS" 0.0000
 echo "Job Done"
 ```
 
+Number of sites for each Chromosome
+
+|Chrom|# of AIMS|
+|-----|---------|
+|  1  |  8948   |
+|  2  |  14386  |
+|  3  |  10409  |
+|  4  |  17211  |
+|  5  |  12362  |
+|  6  |  15483  |
+|  7  |  8235   |
+|  8  |  18949  |
+|  9  |  10019  |
+|  10 |  14372  |
+|  11 |  10866  |
+|  12 |  13923  |
+|  13 |  14492  |
+|  14 |  24575  |
+
+total 194,230 sites
+
 ### 4. AncestryHMM
 
 Run main ancestryhmm program. Because ancestryinfer uses read counts instead of genotype calls, there is a step in between these in that wrapper that thin to one AIM per read for each individual, to account for non-independence. Because we are using genotype calls (-g), this is not necessary. 
+
+First make a current.samples.list
 
 ```
 #!/bin/bash
 #SBATCH --job-name=ancestryhmm
 #SBATCH --output=/project/dtataru/ancestryinfer/logs/ancestryhmm_%j.out
 #SBATCH --error=/project/dtataru/ancestryinfer/logs/ancestryhmm__%j.err
-#SBATCH --time=3-00:00:00
-#SBATCH -p bigmem
+#SBATCH --time=05:00:00
+#SBATCH -p workq
 #SBATCH -N 1
-##SBATCH -n 4
 #SBATCH --cpus-per-task=12
 #SBATCH -A loni_ferrislac
 
@@ -408,7 +430,7 @@ module load python/3.11.5-anaconda
 module load boost/1.83.0/intel-2021.5.0
 module load gcc/13.2.0
 module load gsl/2.7.1/intel-2021.5.0
-module load r/4.4.1
+module load bcftools
 eval "$(conda shell.bash hook)"
 conda activate /home/dtataru/.conda/envs/ancestryinfer
 export PATH=$PATH:/project/dtataru/ancestryinfer/Ancestry_HMM/src
@@ -418,55 +440,58 @@ export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:$LD_LIBRARY_PATH
 PATH_SCRIPTS="/project/dtataru/ancestryinfer"
 AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
 WORKDIR="/work/dtataru/HYBRIDS/HMM_INPUT"
-HYB_AIM_COUNTS="${WORKDIR}/hybrids1.par1.vcf_counts.hmmsites1"
-HYBFILE="${WORKDIR}/HMM.hybrid.files.list"
-PARFILE="${WORKDIR}/HMM.parental.files.list"
-
-INITIAL_ADMIX=0.33
-INITIAL_ADMIX2=0.33
-PAR1_PRIOR=0.33
-PAR2_PRIOR=0.33
-PAR3_PRIOR=0.34
-READ_LENGTH=100
-ERROR_PRIOR=0.02
-SAVE_FILES="save_all"
 FOCAL_CHROM_LIST="/project/dtataru/BWB/ancestryinfer/focal_chrom_list.txt"
-TAG=$(paste -sd "_" "$FOCAL_CHROM_LIST")
-
 cd $WORKDIR
-echo "Running 3-way AncestryHMM on ${HYB_AIM_COUNTS}"
+
+### SAMPLE INFO ###
+echo "Creating current.samples.list file"
+bcftools query -l hybrids1.par1.maxdepth6000.Chr-01.vcf > current.samples.list
+
+SAMPLE_ID=$SLURM_ARRAY_TASK_ID
+SAMPLE_NAME=$(sed -n "${SAMPLE_ID}p" current.samples.list | awk '{print $1}')
+echo "Processing SAMPLE: $SAMPLE_NAME    SAMPLE_ID=$SAMPLE_ID"
 
 ### RUN HMM ###
-echo "Creating current.samples.list file"
-ls ${WORKDIR}/*_counts | sed 's/\_counts//g' > current.samples.list
-echo "Run HMM"
-ancestry_hmm -a 3 \
-    $PAR1_PRIOR $PAR2_PRIOR $PAR3_PRIOR \
-    -p 0 -10000 $PAR1_PRIOR \
-    -p 1 $INITIAL_ADMIX $PAR2_PRIOR \
-    -p 2 $INITIAL_ADMIX2 $PAR3_PRIOR \
-    -e $ERROR_PRIOR \
-	-g \
-    -s current.samples.list \
-    -i ${HYB_AIM_COUNTS} \
-    --tolerance 1e-3
 
-echo "HMM Done"
+### LOOP OVER CHROMS ###
+while read CHROM; do
 
-### CONVERT TO TSV ###
+    echo "  → Processing chromosome $CHROM"
 
-echo "Converting output"
-perl ${PATH_SCRIPTS}/convert_rchmm_to_ancestry_tsv_3way_v1.pl current.samples.list current.samples.list 1 ${FOCAL_CHROM_LIST}
+    INPUT="${WORKDIR}/hybrids1.par1.maxdepth6000.${CHROM}.vcf_counts.hmmsites1"
 
-echo "Transposing ancestry probabilities"
-perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par1_transposed.tsv
-perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par2_transposed.tsv
-perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par3_transposed.tsv
-perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par1par2_transposed.tsv
-perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par1par3_transposed.tsv
-perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-pcrobs-par2par3_transposed.tsv
+    ### DETERMINE SAMPLE COLUMNS ###
+    A_col=$((10 + (SAMPLE_ID-1)*2))
+    a_col=$((11 + (SAMPLE_ID-1)*2))
 
-echo "Job Done"
+    echo "     Sample columns: A=$A_col   a=$a_col"
+
+    OUTFILE="${SAMPLE_NAME}.${CHROM}.counts.hmmsites1"
+
+    ### Extract first 9 columns + sample's two genotype columns ###
+    awk -v A=$A_col -v a=$a_col -v OFS="\t" \
+        '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$A,$a}' \
+        "$INPUT" > "$OUTFILE"
+
+    ### Write sample-specific sample list file ###
+    echo -e "${SAMPLE_NAME}\t2" > ${SAMPLE_NAME}.${CHROM}.samples
+
+    ### RUN ANCESTRY_HMM ###
+    ancestry_hmm \
+        -i "$OUTFILE" \
+        -s "${SAMPLE_NAME}.${CHROM}.samples" \
+        -a 3 0.33 0.33 0.34 \
+        -p 0 -10000 0.33 \
+        -p 1 -1000 0.33 \
+        -p 2 -500 0.34 \
+        -e 0.05 -g
+
+    echo "Done with $SAMPLE_NAME on $CHROM"
+
+done < "$FOCAL_CHROM_LIST"
+
+echo "ALL COMPLETE for sample $SAMPLE_NAME"
+
 ```
 
 ## 5. PARSE TSVs FOR PLOTTING
