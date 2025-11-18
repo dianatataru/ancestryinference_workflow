@@ -322,7 +322,7 @@ THREADS=20
 #echo "BAM files merged"
 
 ```
-In this script, the I changed the mpileup step from this to what is current, because default max-depth is 250 and that is way too low for 308 samples at 23x. It timed out after 3 days of trying to make it, though. Now I am going to run a second script for variant calling that runs an array by chromosomeRunning variant calling by chromosome
+In this script, the I changed the mpileup step from this to what is current, because default max-depth is 250 and that is way too low for 308 samples at 23x. It timed out after 3 days of trying to make it, though. Now I am going to run a second script for variant calling that runs an array by chromosome called ```varcall_simple.sh```:
 
 ```
 #!/bin/bash
@@ -371,19 +371,19 @@ INFILE_AIMS="${OUTVCF}.aims"
 COUNTS="${OUTVCF}_counts"
 AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
 AIM_COUNTS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.txt"
+AIMS_MOD="${AIMS}.mod"
 AIMS_BED="${AIMS}.mod.bed"
 COUNTS_BED="${COUNTS}.bed"
 
-perl "${PATH_SCRIPTS}/vcf_to_counts_non-colinear_DTv3.pl" $OUTVCF $AIMS $PATH_SCRIPTS
-#if the output.aims file produces an empty output, run the next line
-#perl "${PATH_SCRIPTS}/vcf_to_counts_non-colinear_DTv4.pl"  "$INFILE_AIMS" "$COUNTS"
-cat "$COUNTS" | perl -p -e 's/_/\\t/g' | awk -v OFS='\\t' '\$1=\$1\"\\t\"\$2' > "$COUNTS_BED"
+awk '!/^#/ {print $1"_"$2"\t"$0}' "$OUTVCF" > "$VCF_MOD"
+perl "${PATH_SCRIPTS}/combine_FAS_scriptome_snippet.pl" "$AIMS_MOD" "$VCF_MOD" "$INFILE_AIMS"
+perl "${PATH_SCRIPTS}/vcf_to_counts_non-colinear_DTv4.pl"  "$INFILE_AIMS" "$COUNTS"
+perl -F'_|\t' -lane 'print join("\t", $F[0], $F[1], @F[4..$#F])' "$COUNTS" > "$COUNTS_BED"
 
 ### COUNTS TO HMM INPUT ###
-#note, vcf_counts_to_hmmv3.pl is very different from v1 and v2, written for a multi-sample file
-#sets recombination rate at beginning of chromosome to 0, output has 595 columns
-perl vcf_counts_to_hmmv3.pl "$COUNTS_BED" "$AIM_COUNTS" 0.00000002 > "${COUNTS}.hmmsites1"
+perl "${PATH_SCRIPTS}/vcf_counts_to_hmmv3.pl" "$COUNTS_BED" "$AIM_COUNTS" 0.00000002 > "${COUNTS}.hmmsites1"
 
+echo "Job Done"
 ```
 
 ### 4. AncestryHMM
