@@ -533,12 +533,13 @@ for p in *.posterior; do
     sample="${p%.posterior}"
     echo "$sample" >> $current_list
 
-    hmmsites="${sample}_counts.hmmsites1"
-    if [[ -f "$hmmsites" ]]; then
-        echo "${INPUT_DIR}/$hmmsites" >> $read_list
-    else
-        echo "WARNING: no hmmsites1 file for sample $base" >&2
-    fi
+    for hmmsites in ${INPUT_DIR}/${sample}.Chr-*.counts.hmmsites1; do
+        if [[ -f "$hmmsites" ]]; then
+            echo "$hmmsites" >> "$read_list"
+        else
+            echo "WARNING: no hmmsites1 files found for sample $sample" >&2
+        fi
+    done
 done
 
 #remove duplicates
