@@ -496,14 +496,14 @@ echo "ALL COMPLETE for sample $SAMPLE_NAME"
 ```
 
 ## 5. PARSE TSVs FOR PLOTTING
-Parsing ancestry from the output tsvs for downstream analysis and visualization. Output of this can be analyzed in something similar to  Banarjee et al. 2023's```Tlalica_three-way_hybrids/local_ancestry_calling/local_ancestry_plots.R```.
+Parsing ancestry from the output tsvs for downstream analysis and visualization. Output of this can be analyzed in something similar to  Banarjee et al. 2023's```Tlalica_three-way_hybrids/local_ancestry_calling/local_ancestry_plots.R```. This is called '''5_ProcessHMM_Output.sh'''
 
 ```
 #!/bin/bash
-#SBATCH --job-name=convert_to_tsv
-#SBATCH --output=/project/dtataru/ancestryinfer/logs/transpose_tsv_%j.out
-#SBATCH --error=/project/dtataru/ancestryinfer/logs/transpose_tsv_%j.err
-#SBATCH --time=1-00:00:00
+#SBATCH --job-name=ProcessHMM_Output
+#SBATCH --output=/project/dtataru/ancestryinfer/logs/ProcessHMM_Output_%j.out
+#SBATCH --error=/project/dtataru/ancestryinfer/logs/ProcessHMM_Output_%j.err
+#SBATCH --time=03:00:00
 #SBATCH -p single
 #SBATCH -N 1
 #SBATCH -n 1
@@ -513,22 +513,61 @@ Parsing ancestry from the output tsvs for downstream analysis and visualization.
 module load R/3.2.4
 
 # Set variables
-WORKING_DIR="work/dtataru/HYBRIDS/HMM_INPUT"
-SCRIPT_DIR="/project/dtataru/ancestryinfer"
-TRANSPOSE_SCRIPT="${SCRIPT_DIR}/transpose_tsv.pl"
-PARSE_SCRIPT="${SCRIPT_DIR}/parse_3way_tsv_to_genotypes_file.pl"
+PATH_SCRIPTS="/project/dtataru/ancestryinfer"
+INPUT_DIR="/work/dtataru/HYBRIDS/HMM_OUT"
+WORKING_DIR="work/dtataru/HYBRIDS/HMM_POSTPROCESS"
 POSTERIOR_THRESH=0.8
-INTERVALS_RSCRIPT="${SCRIPT_DIR}/identify_intervals_ancestryinfer_DTv2.R"
+INTERVALS_RSCRIPT="${PATH_SCRIPTS}/identify_intervals_ancestryinfer_DTv2.R"
+FOCAL_CHROM_LIST="/project/dtataru/BWB/ancestryinfer/focal_chrom_list.txt"      
+TAG=$(paste -sd "_" "$FOCAL_CHROM_LIST")
 
 cd $WORKING_DIR
 
+### Create Input Files ###
+
+current_list="current.posterior.samples.list_${TAG}"
+read_list="current.samples.read.list_${TAG}"
+
+# loop through all .posterior files
+for p in *.posterior; do
+    sample="${p%.posterior}"
+    echo "$sample" >> $current_list
+
+    hmmsites="${sample}_counts.hmmsites1"
+    if [[ -f "$hmmsites" ]]; then
+        echo "${INPUT_DIR}/$hmmsites" >> $read_list
+    else
+        echo "WARNING: no hmmsites1 file for sample $base" >&2
+    fi
+done
+
+#remove duplicates
+sort -u "$current_list" -o "$current_list"
+sort -u "$read_list" -o "$read_list"
+
+### CONVERT TO TSV ###
+
+perl ${PATH_SCRIPTS}/convert_rchmm_to_ancestry_tsv_3way_v2_DT.pl current.posterior.samples.list current.samples.read.list 1 ${FOCAL_CHROM_LIST}
+
+echo "Transposing ancestry probabilities"
+perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par1_transposed_Chr-01_Chr-02_Chr-03_Chr-04_Chr-05_Chr-06_Chr-07_Chr-08_Chr-09_Chr-10_Chr-11_Chr-12_Chr-13_Chr-14.tsv
+perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par2_transposed_Chr-01_Chr-02_Chr-03_Chr-04_Chr-05_Chr-06_Chr-07_Chr-08_Chr-09_Chr-10_Chr-11_Chr-12_Chr-13_Chr-14.tsv
+perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par3_transposed_Chr-01_Chr-02_Chr-03_Chr-04_Chr-05_Chr-06_Chr-07_Chr-08_Chr-09_Chr-10_Chr-11_Chr-12_Chr-13_Chr-14.tsv
+perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par1par2_transposed_Chr-01_Chr-02_Chr-03_Chr-04_Chr-05_Chr-06_Chr-07_Chr-08_Chr-09_Chr-10_Chr-11_Chr-12_Chr-13_Chr-14.tsv
+perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par1par3_transposed_Chr-01_Chr-02_Chr-03_Chr-04_Chr-05_Chr-06_Chr-07_Chr-08_Chr-09_Chr-10_Chr-11_Chr-12_Chr-13_Chr-14.tsv
+perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par2par3_transposed_Chr-01_Chr-02_Chr-03_Chr-04_Chr-05_Chr-06_Chr-07_Chr-08_Chr-09_Chr-10_Chr-11_Chr-12_Chr-13_Chr-14.tsv
+
 ### parse ancestry in transposed tsvs ###
 echo "parse transposed tsv start"
-perl $PARSE_SCRIPT Chr-01_Chr-02_Chr-03_Chr-04_Chr-05_Chr-06_Chr-07_Chr-08_Chr-09_Chr-10_Chr-11_Chr-12_Chr-13_Chr-14.tsv $POSTERIOR_THRESH > ancestry-probs_allchrs.tsv_rec.txt
+POSTERIOR_THRESH=0.8
+perl ${PATH_SCRIPTS}/parse_3way_tsv_to_genotypes_file.pl Chr-01_Chr-02_Chr-03_Chr-04_Chr-05_Chr-06_Chr-07_Chr-08_Chr-09_Chr-10_Chr-11_Chr-12_Chr-13_Chr-14.tsv $POSTERIOR_THRESH > genotypes.txt
+
+perl ${PATH_SCRIPTS}/parse_3way_tsv_ancestry.pl Chr-01_Chr-02_Chr-03_Chr-04_Chr-05_Chr-06_Chr-07_Chr-08_Chr-09_Chr-10_Chr-11_Chr-12_Chr-13_Chr-14.tsv 0.8 > ancestry_proportions.txt
+
 echo "all files parsed"
 
 ### identify intervals ###
 echo "run intervals R script"
-Rscript $INTERVALS_RSCRIPT ancestry-probs_allchrs.tsv_rec.txt $SCRIPT_DIR
+Rscript ${PATH_SCRIPTS}/identify_intervals_ancestryinfer_DTv2.R genotypes.txt ${PATH_SCRIPTS}
 echo "identified intervals"
 ```
