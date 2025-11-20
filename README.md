@@ -42,6 +42,24 @@ Located in ```/project/dtataru/ancestryinfer```. This has multiple input files t
       1.  MguttatusTOL_551_v5.0.fa  
       2.  Mnasutusvar_SF_822_v2.0.fa  
       3.  WLF47.fasta (consensus genome made by me with high coverage unpub. sequencing data  
+
+Sites fixed for each species:
+lac(subset): 52,000
+nas:51659
+gut:24,590
+total:128,249
+
+First time around ended up with 698623 remaining_sites.txt
+Ended up wtih 203414. Need to revisit this filitering step because I'm worries that those many sites that weren't fixed were mostly guttatus and then when I subset I ended up with very few laciniatus sites. Let me investigate in the aims file briefly:
+
+Number of guttatus Alt Counts: 730625 (Ref=907553, total=1,638,178)
+awk '{ sum += $6 } END { print sum }' AIMs_panel15_final.AIMs.txt
+
+Number of laciniatus Alt Counts: 1053592 (Ref=642072, total=1,695,664)
+awk '{ sum += $8 } END { print sum }' AIMs_panel15_final.AIMs.txt
+
+Number of nasutus Alt Counts: 1576401 (Ref- 254823, total= 1,831,224)
+awk '{ sum += $11 } END { print sum }' AIMs_panel15_final.AIMs.txt
 	  
 ## 1. Aligning all samples to three reference genomes
 
