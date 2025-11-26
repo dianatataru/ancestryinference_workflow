@@ -45,7 +45,7 @@ Located in ```/project/dtataru/ancestryinfer```. This has multiple input files t
 
 Sites fixed for each species:
 lac(subset): 52,000
-nas:51659
+nas:51,659
 gut:24,590
 total:128,249
 
@@ -60,6 +60,14 @@ awk '{ sum += $8 } END { print sum }' AIMs_panel15_final.AIMs.txt
 
 Number of nasutus Alt Counts: 1576401 (Ref- 254823, total= 1,831,224)
 awk '{ sum += $11 } END { print sum }' AIMs_panel15_final.AIMs.txt
+
+Okay, so something is off here, still, and I think it has to do with the way sites were subset or some way that ref/alt is being called. I think I want to try to run this with the full set up AIMS that I got, with 1267995 total sites.
+
+```
+cd /project/dtataru/lac_nas_gut/AIMS/VCFs
+awk '{print $1, $2, $3, $4}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.filtered.txt > ${WORKING_DIR}/AIMs_panel15_final.AIMs.txt
+awk '{print $1, $2, $5, $6, $7, $8}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.filtered.txt > ${WORKING_DIR}/AIMs_panel15_final.AIMs_counts.txt
+```
 	  
 ## 1. Aligning all samples to three reference genomes
 
