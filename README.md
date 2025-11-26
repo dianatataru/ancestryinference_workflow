@@ -68,7 +68,7 @@ awk 'BEGIN{OFS="\t"} {gsub(/Chr_/,"Chr-",$1); print $1, $2, $5, $6, $7, $8}' \
     panel15.TOL551.SNPs.fspi.rm.AIMs_counts.filtered.txt \
     > /project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.full.txt
 ```
-I found a typo in my genotype_filterv4.sh which meant there was no nasutus calls. I redid this and am now going to rerun steps 3 and 4, with 4 having different HMM priors.
+I found a typo in my genotype_filterv4.sh which meant there was no nasutus calls. I redid this ended up with 499547 sites, and am now going to rerun steps 3 and 4, with 4 having different HMM priors.
 
 ## 1. Aligning all samples to three reference genomes
 
