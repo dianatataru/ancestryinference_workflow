@@ -65,8 +65,8 @@ Okay, so something is off here, still, and I think it has to do with the way sit
 
 ```
 cd /project/dtataru/lac_nas_gut/AIMS/VCFs
-awk '{print $1, $2, $3, $4}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.filtered.txt > ${WORKING_DIR}/AIMs_panel15_final.AIMs.txt
-awk '{print $1, $2, $5, $6, $7, $8}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.filtered.txt > ${WORKING_DIR}/AIMs_panel15_final.AIMs_counts.txt
+awk '{print $1, $2, $3, $4}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.filtered.txt > /project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.full.txt
+awk '{print $1, $2, $5, $6, $7, $8}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.filtered.txt > /project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.full.txt
 ```
 	  
 ## 1. Aligning all samples to three reference genomes
