@@ -4,11 +4,11 @@ Alterations to the Schumer Lab's threeway ancestryinfer program (https://github.
 Written by: Diana Tataru
 Created: June 11, 2025
 
-## 0. Create AIMS: Run genotype_filter.sh
+## 0. Create AIMS: Run genotype_filterv4.sh
 
 This script is adapted for three species from the following manuscript: Fluctuating reproductive isolation and stable ancestry structure in a fine-scaled mosaic of #hybridizing Mimulus monkeyflowers" by Matthew Farnitano, Keith Karoly, and Andrea Sweigart, and github: https://github.com/mfarnitano/CAC_popgen/#blob/main/reference_panels/genotype_filter.sh  
 
-Located in ```/lustre/project/kferris/Diana_Tataru/lac_nas_gut/AIMS```. This script creates a file with ancestry informative sites (AIMs) from 5 allopatric populations each of three species: *M. guttatus, M.laciniatus,* and *M. nasutus*. Input file for it is a joint genotyped vcf ```lacnasgut_jointgeno.vcf.gz```, created using the Ferris Lab GATK variant calling pipeline, using TOLv5 of *M. guttatus* as the reference. These are the populations used:
+Located in ```project/dtataru/lac_nas_gut/AIMS```. This script creates a file with ancestry informative sites (AIMs) from 5 allopatric populations each of three species: *M. guttatus, M.laciniatus,* and *M. nasutus*. Input file for it is a joint genotyped vcf ```lacnasgut_jointgeno.vcf.gz```, created using the Ferris Lab GATK variant calling pipeline, using TOLv5 of *M. guttatus* as the reference. These are the populations used:
 
 |    Species    |  Pop |    SRA     | Longitude  | Latitude  |
 |    -------    | ---  | ---------  | ---------  | --------  |
@@ -36,21 +36,15 @@ To visualize distribution of AIMs genomewide, run ```visualizeAIMs.R ```. This a
 |  9260 | 15019 | 11090 | 17851 | 13041 | 16073 | 8709  | 20077 | 10296 | 15111 | 11289 | 14642 | 15133 | 25823 | 
 
 Additional files needed to run this:
-Located in ```/project/dtataru/ancestryinfer```. This has multiple input files that need to be created and changed.   
+Located in ```/project/dtataru/lac_nas_gut/AIMS```. This has multiple input files that need to be created and changed.   
   a.  output ```AIMs_panel15_final.AIMs_counts.txt``` & ```AIMs_panel15_final.AIMs.txt``` 
   b.  Reference genomes for each of three species, I'm using the following, listed in ```/project/dtataru/hybrids/ancestryinfer/reference_genomes/```:  
       1.  MguttatusTOL_551_v5.0.fa  
       2.  Mnasutusvar_SF_822_v2.0.fa  
       3.  WLF47.fasta (consensus genome made by me with high coverage unpub. sequencing data  
 
-Sites fixed for each species:
-lac(subset): 52,000
-nas:51,659
-gut:24,590
-total:128,249
 
-First time around ended up with 698623 remaining_sites.txt
-Ended up wtih 203414. Need to revisit this filitering step because I'm worries that those many sites that weren't fixed were mostly guttatus and then when I subset I ended up with very few laciniatus sites. Let me investigate in the aims file briefly:
+First time around ended up with 698623 remaining_sites.txt, then after filtering to sites uniquely fixed to each species and only one AIM for every 100 bp, ended up wtih 203414. Need to revisit this filtering step because I'm worries that those many sites that weren't fixed were mostly guttatus and then when I subset I ended up with very few laciniatus sites. Let me investigate in the aims file briefly:
 
 Number of guttatus Alt Counts: 730625 (Ref=907553, total=1,638,178)
 awk '{ sum += $6 } END { print sum }' AIMs_panel15_final.AIMs.txt
@@ -61,7 +55,7 @@ awk '{ sum += $8 } END { print sum }' AIMs_panel15_final.AIMs.txt
 Number of nasutus Alt Counts: 1576401 (Ref- 254823, total= 1,831,224)
 awk '{ sum += $11 } END { print sum }' AIMs_panel15_final.AIMs.txt
 
-Okay, so something is off here, still, and I think it has to do with the way sites were subset or some way that ref/alt is being called. I think I want to try to run this with the full set up AIMS that I got, with 1267995 total sites.
+Okay, so something is off here, still, and I think it has to do with the way sites were subset or some way that ref/alt is being called. I think I want to try to run this with the full set up unthinned AIMS that I got, with 1267995 total sites. After running this it is still off.
 
 ```
 cd /project/dtataru/lac_nas_gut/AIMS/VCFs
@@ -74,7 +68,8 @@ awk 'BEGIN{OFS="\t"} {gsub(/Chr_/,"Chr-",$1); print $1, $2, $5, $6, $7, $8}' \
     panel15.TOL551.SNPs.fspi.rm.AIMs_counts.filtered.txt \
     > /project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.full.txt
 ```
-	  
+I found a typo in my genotype_filterv4.sh which meant there was no nasutus calls. I redid this and am now going to rerun steps 3 and 4, with 4 having different HMM priors.
+
 ## 1. Aligning all samples to three reference genomes
 
 Use ```bwa mem``` to map reads from each hybrid individual to all parental references independently. Input files are fastq files for all samples, four lanes per sample and two reads per lane (Total 1,232 arrays).  In the TMPDIR, this creates a folder for each sample, with all reads aligned for each lane run. Output is three .sam files for each sample, corresponding to each species' reference genome. In the next step, these separate runs will be merged. This script is ```map_array_DT.sh ```.
