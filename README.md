@@ -35,6 +35,12 @@ To visualize distribution of AIMs genomewide, run ```visualizeAIMs.R ```. This a
 | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
 |  9260 | 15019 | 11090 | 17851 | 13041 | 16073 | 8709  | 20077 | 10296 | 15111 | 11289 | 14642 | 15133 | 25823 | 
 
+number of AIMS per chromosome for v2:
+
+| Chr01 | Chr02 | Chr03 | Chr04 | Chr05 | Chr06 | Chr07 | Chr08 | Chr09 | Chr10 | Chr11 | Chr12 | Chr13 | Chr14 |
+| ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
+|33172  |55669  |41019  |64583  |48556  |60589  | 33813 | 74756 | 41348 | 57280 | 43404 | 56877 | 54787 | 95319 | 
+
 Additional files needed to run this:
 Located in ```/project/dtataru/lac_nas_gut/AIMS```. This has multiple input files that need to be created and changed.   
   a.  output ```AIMs_panel15_final.AIMs_counts.txt``` & ```AIMs_panel15_final.AIMs.txt``` 
