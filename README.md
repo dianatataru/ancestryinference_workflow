@@ -375,7 +375,6 @@ module load bcftools
 module load samtools
 
 ### ASSIGN VARIABLES ###
-PATH_SCRIPTS="/project/dtataru/ancestryinfer"
 genome1="/project/dtataru/hybrids/ancestryinfer/reference_genomes/MguttatusTOL_551_v5.0.fa"
 WORKDIR="/work/dtataru/HYBRIDS/HMM_INPUT"
 BAM_FILE="${WORKDIR}/hybrids1merged.par1.sorted.pass.unique.bam"
@@ -401,21 +400,27 @@ bcftools mpileup -Ou -d 6000 -r "$CHR" -f "$genome1" "$BAM_FILE" | bcftools call
 echo "start generating hmm input"
 
 ### AIMS TO COUNTS ###
-INFILE_AIMS="${OUTVCF}.aims"
-COUNTS="${OUTVCF}_counts"
-AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
-AIM_COUNTS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.txt"
+INFILE_AIMS="${OUTVCF}.v2.aims"
+COUNTS="${OUTVCF}.v2_counts"
+AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.v2.txt"
+AIM_COUNTS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.v2.txt"
 AIMS_MOD="${AIMS}.mod"
 AIMS_BED="${AIMS}.mod.bed"
 COUNTS_BED="${COUNTS}.bed"
 
+#modify aims
+#awk -v OFS='\t' '{print $1"_"$2, $1, $2, $3, $4}' "$AIMS" > "$AIMS_MOD"
+
+#modify vcf
 awk '!/^#/ {print $1"_"$2"\t"$0}' "$OUTVCF" > "$VCF_MOD"
+
+#merge aims and vcf
 perl "${PATH_SCRIPTS}/combine_FAS_scriptome_snippet.pl" "$AIMS_MOD" "$VCF_MOD" "$INFILE_AIMS"
-perl "${PATH_SCRIPTS}/vcf_to_counts_non-colinear_DTv4.pl"  "$INFILE_AIMS" "$COUNTS"
+perl "${PATH_SCRIPTS}/vcf_to_counts_non-colinear_DTv5.pl"  "$INFILE_AIMS" "$COUNTS"
 perl -F'_|\t' -lane 'print join("\t", $F[0], $F[1], @F[4..$#F])' "$COUNTS" > "$COUNTS_BED"
 
 ### COUNTS TO HMM INPUT ###
-perl "${PATH_SCRIPTS}/vcf_counts_to_hmmv3.pl" "$COUNTS_BED" "$AIM_COUNTS" 0.00000002 > "${COUNTS}.hmmsites1"
+perl "${PATH_SCRIPTS}/vcf_counts_to_hmm_DT.pl" "$COUNTS_BED" "$AIM_COUNTS" 0.0000000387 > "${COUNTS}.hmmsites1"
 
 echo "Job Done"
 ```
