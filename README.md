@@ -74,8 +74,58 @@ awk 'BEGIN{OFS="\t"} {gsub(/Chr_/,"Chr-",$1); print $1, $2, $5, $6, $7, $8}' \
     panel15.TOL551.SNPs.fspi.rm.AIMs_counts.filtered.txt \
     > /project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.full.txt
 ```
-I found a typo in my genotype_filterv4.sh which meant there was no nasutus calls. I redid this ended up with 499547 sites, and am now going to rerun steps 3 and 4, with 4 having different HMM priors.
+I found a typo in my genotype_filterv4.sh which meant that nasutus counts were being called incorrectly. Also, it was not picking up whether the alt allele was the one identified in the AIMS, so I changed code to only match counts when the ref and alt from AIMs match those in the vcf. Lastly, I edited it so that when genotype call is: 0/0 = 2 0, 0/1 = 1 1, 1/1 = 0 2. I fixed these and reran, ended up with 800357 sites, and am now going to rerun steps 3 and 4, with 4 having different HMM priors. I reran it and everything came up looking like 50% laciniatus, 50% nasutus. I think it has to do with this filtering line of code in my 0_genotype_filter_finalDT.sh script:
+```
+awk '($5 != 0 || $7 != 0 || $9 != 0)' ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v2.txt > ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v2.filtered.txt
+```
+The goal of this line is to remove sites where all sites have the alternate allele, by removing sites where all species REF counts are 0, but that is not actually what I want. I actually want to just keep sites where the alt is unique to the species. 
 
+Additionally, these line of code in genocounts_group_threeway.py are trying to filter but incorrectly because I don't think I care if each species has at least one called allele?
+
+```
+# Check that each species has at least one called allele
+        if all((counts[sp]["ref"] + counts[sp]["alt"]) > 0 for sp in species_list):
+            # Calculate alt allele frequencies
+            props = {sp: counts[sp]["alt"] / max(1, counts[sp]["ref"]+counts[sp]["alt"]) for sp in species_list}
+            max_prop = max(props.values()) #highest alt proportion across species
+            min_prop = min(props.values()) #lowest alt proporiton across species
+            if (max_prop - min_prop) >= min_prop_diff:
+                out = [chrom,pos,ref,alt]
+                for sp in species_list:
+                    c = counts[sp]
+                    out += [str(c["ref"]), str(c["alt"]), str(c["na"]), str(c["n"])]
+                print("\t".join(out))
+```
+We want to do something similar to banarjee et al. 2023, "We thinned
+to an approximately equivalent number of informative sites
+between all pairs of species. To do so, we retained all ancestry-
+informative sites that distinguished X. birchmanni and X.
+malinche, and every other site that distinguished X. variatus
+from either of these two species."
+changing that code to to:
+```
+    # Compute ALT proportions for every species
+    props = {
+        sp: counts[sp]["alt"] / (counts[sp]["ref"] + counts[sp]["alt"])
+        for sp in species_list
+    }
+
+    # Count how many species have alt freq > 0.8
+    high_alt_species = [sp for sp, p in props.items() if p >= 0.8]
+	for sp in high_alt_species:
+    	high_alt_counts[sp] += 1
+
+    # keep site if only one species has alt proportion higher than 0.8
+    if len(high_alt_species) == 1:
+        out = [chrom, pos, ref, alt]
+        for sp in species_list:
+            c = counts[sp]
+            out += [str(c["ref"]), str(c["alt"]), str(c["na"]), str(c["n"])]
+        print("\t".join(out))
+		print("Total high-ALT SNPs per species:", high_alt_counts, file=sys.stderr)
+
+
+```
 ## 1. Aligning all samples to three reference genomes
 
 Use ```bwa mem``` to map reads from each hybrid individual to all parental references independently. Input files are fastq files for all samples, four lanes per sample and two reads per lane (Total 1,232 arrays).  In the TMPDIR, this creates a folder for each sample, with all reads aligned for each lane run. Output is three .sam files for each sample, corresponding to each species' reference genome. In the next step, these separate runs will be merged. This script is ```map_array_DT.sh ```.
