@@ -96,12 +96,7 @@ Additionally, these line of code in genocounts_group_threeway.py are trying to f
                     out += [str(c["ref"]), str(c["alt"]), str(c["na"]), str(c["n"])]
                 print("\t".join(out))
 ```
-We want to do something similar to banarjee et al. 2023, "We thinned
-to an approximately equivalent number of informative sites
-between all pairs of species. To do so, we retained all ancestry-
-informative sites that distinguished X. birchmanni and X.
-malinche, and every other site that distinguished X. variatus
-from either of these two species."
+We want to do something similar to banarjee et al. 2023, "We thinned to an approximately equivalent number of informative sites between all pairs of species. To do so, we retained all ancestry-informative sites that distinguished X. birchmanni and X. malinche, and every other site that distinguished X. variatus from either of these two species."
 changing that code to to:
 ```
     # Compute ALT proportions for every species
@@ -123,9 +118,34 @@ changing that code to to:
             out += [str(c["ref"]), str(c["alt"]), str(c["na"]), str(c["n"])]
         print("\t".join(out))
 		print("Total high-ALT SNPs per species:", high_alt_counts, file=sys.stderr)
+```
 
+panel15.TOL551.SNPs.fspi.rm.counts.v3.txt:
+2,746,758 total sites
+Total high-ALT SNPs per species: {'guttatus': 658786, 'nasutus': 1076451, 'laciniatus': 1011520}
+
+Output thinned:
+1,104,019 total sites
+
+Okay, so now I need to figure out how many of these thinned sites are max proportion ALT for each species, and thin to about equal numbers for each. It's still a little unclear to me whether it's better to filter sites before or after thinning. If I filtered before thinning then I would maybe have to thin again.
 
 ```
+awk 'NR>1 {
+    max=$6; winner="guttatus";
+    if ($8>max) {max=$8; winner="nasutus"}
+    if ($10>max) {max=$10; winner="laciniatus"}
+    count[winner]++
+}
+END {
+    for (sp in count) print sp, count[sp]
+}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v3.thinned.txt
+```
+laciniatus 377015
+nasutus 427369
+guttatus 299634
+
+Not horribly different between species. So, the main difference between these aims and the other ones I used are that these ones contain sites where some species have all 0s. I think I also want to try and filter by sites where all species have at least one count in ref or alt, and call that aims_v4, just in case. 
+
 ## 1. Aligning all samples to three reference genomes
 
 Use ```bwa mem``` to map reads from each hybrid individual to all parental references independently. Input files are fastq files for all samples, four lanes per sample and two reads per lane (Total 1,232 arrays).  In the TMPDIR, this creates a folder for each sample, with all reads aligned for each lane run. Output is three .sam files for each sample, corresponding to each species' reference genome. In the next step, these separate runs will be merged. This script is ```map_array_DT.sh ```.
