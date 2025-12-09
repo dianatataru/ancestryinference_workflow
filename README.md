@@ -146,6 +146,87 @@ guttatus 299634
 
 Not horribly different between species. So, the main difference between these aims and the other ones I used are that these ones contain sites where some species have all 0s. I think I also want to try and filter by sites where all species have at least one count in ref or alt, and call that aims_v4, just in case. 
 
+thinned.aims_v4: laciniatus 287938, nasutus 348803, guttatus 131002
+unthinned.aims_v4: {'guttatus': 257533, 'nasutus': 794065, 'laciniatus': 695118}
+
+I think I want to do some species-aware balancing and then thinning to the unthinned.aims_v4. 
+
+first I'll create a column to classify the species:
+
+```
+awk 'NR>1 {
+    g=$6; n=$8; l=$10;
+
+    max=g; species="guttatus";
+    if (n>max) {max=n; species="nasutus"}
+    if (l>max) {species="laciniatus"}
+
+    print $0 "\t" species
+}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.txt \
+    > panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.species.txt
+```
+Then balance by species in balance_species.py with
+```python balance_species.py /project/dtataru/lac_nas_gut/AIMS/VCFs/panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.species.txt /project/dtataru/lac_nas_gut/AIMS/VCFs/panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesbalanced.txt 257000``` 
+where 257000 is max_per_species I want to keep. Here is that script:
+
+```
+#!/usr/bin/python
+import sys, random
+
+###USAGE:python balance_species.py {AIM_counts}.species.txt {AIM_counts}.speciesbalanced.txt max_per_species
+
+infile = sys.argv[1]
+outfile = sys.argv[2]
+max_per_species = int(sys.argv[3])  # e.g. 200000
+
+species_rows = {"guttatus": [], "nasutus": [], "laciniatus": []}
+
+with open(infile) as f:
+    header = f.readline()
+    for line in f:
+        fields = line.strip().split("\t")
+        species = fields[-1]
+        species_rows[species].append(line)
+
+random.seed(42)
+
+balanced = []
+for sp in species_rows:
+    rows = species_rows[sp]
+    if len(rows) > max_per_species:
+        balanced += random.sample(rows, max_per_species)
+    else:
+        balanced += rows
+
+with open(outfile, "w") as out:
+    out.write(header)
+    for row in balanced:
+        out.write(row)
+
+for sp in species_rows:
+    print(sp, "kept", min(len(species_rows[sp]), max_per_species),
+          "of", len(species_rows[sp]), file=sys.stderr)
+```
+output said: guttatus kept 257000 of 275746, nasutus kept 257000 of 804072, laciniatus kept 257000 of 666896. and then do  thinning:
+```
+ python /project/dtataru/lac_nas_gut/AIMS/thin_positions.py 100 panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesbalanced.txt > panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesbalanced.thinned.txt
+
+```
+Now lets look at the numbers:
+```
+awk 'NR>1 {
+    max=$6; winner="guttatus";
+    if ($8>max) {max=$8; winner="nasutus"}
+    if ($10>max) {max=$10; winner="laciniatus"}
+    count[winner]++
+}
+END {
+    for (sp in count) print sp, count[sp]
+}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesbalanced.thinned.txt
+```
+total of 490769 sites (771001 before thinning to one AIM per 100 bp), laciniatus 167507, nasutus 171174, guttatus 152087
+
+
 ## 1. Aligning all samples to three reference genomes
 
 Use ```bwa mem``` to map reads from each hybrid individual to all parental references independently. Input files are fastq files for all samples, four lanes per sample and two reads per lane (Total 1,232 arrays).  In the TMPDIR, this creates a folder for each sample, with all reads aligned for each lane run. Output is three .sam files for each sample, corresponding to each species' reference genome. In the next step, these separate runs will be merged. This script is ```map_array_DT.sh ```.
