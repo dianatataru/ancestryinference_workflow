@@ -80,7 +80,7 @@ awk '($5 != 0 || $7 != 0 || $9 != 0)' ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v2.txt 
 ```
 The goal of this line is to remove sites where all sites have the alternate allele, by removing sites where all species REF counts are 0, but that is not actually what I want. I actually want to just keep sites where the alt is unique to the species. 
 
-Additionally, these line of code in genocounts_group_threeway.py are trying to filter but incorrectly because I don't think I care if each species has at least one called allele?
+Additionally, these line of code in genocounts_group_threeway.py are trying to filter but incorrectly because it doesn't account for the third species propotrtion.
 
 ```
 # Check that each species has at least one called allele
@@ -226,7 +226,23 @@ END {
 ```
 total of 490769 sites (771001 before thinning to one AIM per 100 bp), laciniatus 167507, nasutus 171174, guttatus 152087
 
+REDO:
+wrote the script thin_byspecieswindows.py which is supposed to replace the original balancing and thinning scripts. this sets 100 kb windows and finds the species with the least amount of aims in the window and randomly thins to that number of aims. run it using:
+```
+python /project/dtataru/lac_nas_gut/AIMS/thin_by_specieswindows.py panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.species.txt 100000 \
+    >  panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesdensity.txt \
+    2> thinning.stats
+```
+=== Species counts AFTER thinning ===
+guttatus        260444
+nasutus 260448
+laciniatus      260445
+total 781,337
 
+then sort it:
+```
+sort -k1,1V -k2,2n panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesdensity.txt > panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesdensitysorted.txt
+```
 ## 1. Aligning all samples to three reference genomes
 
 Use ```bwa mem``` to map reads from each hybrid individual to all parental references independently. Input files are fastq files for all samples, four lanes per sample and two reads per lane (Total 1,232 arrays).  In the TMPDIR, this creates a folder for each sample, with all reads aligned for each lane run. Output is three .sam files for each sample, corresponding to each species' reference genome. In the next step, these separate runs will be merged. This script is ```map_array_DT.sh ```.
