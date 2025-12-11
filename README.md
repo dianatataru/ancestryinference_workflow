@@ -243,6 +243,9 @@ then sort it:
 ```
 sort -k1,1V -k2,2n panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesdensity.txt > panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesdensitysorted.txt
 ```
+
+v5 of the aims is created with  genocounts_groups_threeway_v4.py and thin_by_specieswindows.py, and specifically only keeps sites where there is >90% difference in alt allele frequency of highest frequency and lowest frequency species. This ends up being almost equal parts each species across SNPs
+
 ## 1. Aligning all samples to three reference genomes
 
 Use ```bwa mem``` to map reads from each hybrid individual to all parental references independently. Input files are fastq files for all samples, four lanes per sample and two reads per lane (Total 1,232 arrays).  In the TMPDIR, this creates a folder for each sample, with all reads aligned for each lane run. Output is three .sam files for each sample, corresponding to each species' reference genome. In the next step, these separate runs will be merged. This script is ```map_array_DT.sh ```.
