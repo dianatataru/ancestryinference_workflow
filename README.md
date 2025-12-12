@@ -1,5 +1,5 @@
 # ancestryinference_workflow
-Alterations to the Schumer Lab's threeway ancestryinfer program (https://github.com/Schumerlab/ancestryinfer) to be run with three Mimulus species (M. guttatus, M. lacinatus, M. nasutus). Requires downloading the ancestryinfer program to run.
+Alterations to the Schumer Lab's threeway ancestryinfer program (https://github.com/Schumerlab/ancestryinfer) to run AncestryHMM (Corbett-Detig and Nielsen 2017) with three Mimulus species (*M. guttatus, M. lacinatus, M. nasutus*). Requires downloading the ancestryinfer program to run.
 
 Written by: Diana Tataru
 Created: June 11, 2025
