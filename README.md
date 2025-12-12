@@ -842,21 +842,20 @@ done
 echo "BAM files merged"
 
 ```
-Now I am going to run a second script for variant calling that runs an array by chromosome called ```varcall_simple.sh```, setting mak depth to 6000 for about 20x per sample:
+Now I am going to run a second script for variant calling that runs an array by chromosome called ```varcall_simple.sh```, setting max read depth to 6000 for about 20x per sample:
 
 ```
 #!/bin/bash
 #SBATCH --job-name=varcall
 #SBATCH --output=/project/dtataru/ancestryinfer/logs/varcall_%j.out
 #SBATCH --error=/project/dtataru/ancestryinfer/logs/varcall_%j.err
-#SBATCH --time=3-00:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH -p single
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH --cpus-per-task=24
 #SBATCH -A loni_ferrislac
-#SBATCH --array=1-14       
-#SBATCH --mem=32G
+#SBATCH --array=1-14
 
 module load bcftools
 module load samtools
@@ -871,15 +870,9 @@ OUTVCF="hybrids1.par1.maxdepth6000.${CHR}.vcf"
 PATH_SCRIPTS="/project/dtataru/ancestryinfer"
 
 ### VARIANT CALLING ###
-echo "start variant calling"
+#echo "start variant calling"
 
 cd "$WORKDIR"
-
-#exit if vcf already exists
-if [[ -s "$OUTVCF" ]]; then
-    echo "Output exists, skipping: $OUTVCF"
-    exit 0
-fi
 
 bcftools mpileup -Ou -d 6000 -r "$CHR" -f "$genome1" "$BAM_FILE" | bcftools call -m -Ov -o "$OUTVCF"
 
@@ -887,13 +880,13 @@ bcftools mpileup -Ou -d 6000 -r "$CHR" -f "$genome1" "$BAM_FILE" | bcftools call
 echo "start generating hmm input"
 
 ### AIMS TO COUNTS ###
-INFILE_AIMS="${OUTVCF}.v2.aims"
-COUNTS="${OUTVCF}.v2_counts"
-AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.v2.txt"
-AIM_COUNTS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.v2.txt"
+INFILE_AIMS="${OUTVCF}.v3.aims"
+COUNTS="${OUTVCF}.v3_counts"
+AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.v3.txt"
+AIM_COUNTS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.v3.txt"
 AIMS_MOD="${AIMS}.mod"
-AIMS_BED="${AIMS}.mod.bed"
 COUNTS_BED="${COUNTS}.bed"
+VCF_MOD="${OUTVCF}.mod"
 
 #modify aims
 awk -v OFS='\t' '{print $1"_"$2, $1, $2, $3, $4}' "$AIMS" > "$AIMS_MOD"
@@ -907,6 +900,7 @@ perl "${PATH_SCRIPTS}/vcf_to_counts_non-colinear_DTv5.pl"  "$INFILE_AIMS" "$COUN
 perl -F'_|\t' -lane 'print join("\t", $F[0], $F[1], @F[4..$#F])' "$COUNTS" > "$COUNTS_BED"
 
 ### COUNTS TO HMM INPUT ###
+#changed recombination rate to 0.0000000387 from 0.00000002 following Farnitano et al. 2025
 perl "${PATH_SCRIPTS}/vcf_counts_to_hmm_DT.pl" "$COUNTS_BED" "$AIM_COUNTS" 0.0000000387 > "${COUNTS}.hmmsites1"
 
 echo "Job Done"
@@ -914,7 +908,7 @@ echo "Job Done"
 
 ### 4. AncestryHMM
 
-Run main ancestryhmm program. Because ancestryinfer uses read counts instead of genotype calls, there is a step in between these in that wrapper that thin to one AIM per read for each individual, to account for non-independence. Because we are using genotype calls (-g), this is not necessary. Calling this ```run_hmm_DT.sh ```:
+Run main ancestryhmm program. Ancestryinfer uses read counts instead of genotype calls, but we have high coverage data so we are using genotype calls (-g).. Calling this ```4_run_hmm_DT.sh ```:
 
 ```
 #!/bin/bash
@@ -922,11 +916,11 @@ Run main ancestryhmm program. Because ancestryinfer uses read counts instead of 
 #SBATCH --output=/project/dtataru/ancestryinfer/logs/ancestryhmm_%j.out
 #SBATCH --error=/project/dtataru/ancestryinfer/logs/ancestryhmm__%j.err
 #SBATCH --time=05:00:00
-#SBATCH -p workq
+#SBATCH -p single
 #SBATCH -N 1
 #SBATCH --cpus-per-task=12
 #SBATCH -A loni_ferrislac
-#SBATCH --array=1             # one task = one sample
+#SBATCH --array=156-305%40             # one task = one sample, 305 total samples
 
 ### LOAD MODULES ###
 module load python/3.11.5-anaconda
@@ -934,6 +928,7 @@ module load boost/1.83.0/intel-2021.5.0
 module load gcc/13.2.0
 module load gsl/2.7.1/intel-2021.5.0
 module load bcftools
+module load r/4.3.2/gcc-9.3.0 
 eval "$(conda shell.bash hook)"
 conda activate /home/dtataru/.conda/envs/ancestryinfer
 export PATH=$PATH:/project/dtataru/ancestryinfer/Ancestry_HMM/src
@@ -941,14 +936,13 @@ export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:$LD_LIBRARY_PATH
 
 ### ASSIGN VARIABLES ###
 PATH_SCRIPTS="/project/dtataru/ancestryinfer"
-AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
+AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.full.txt"
 INPUTDIR="/work/dtataru/HYBRIDS/HMM_INPUT"
 WORKDIR="/work/dtataru/HYBRIDS/HMM_OUTPUT"
 FOCAL_CHROM_LIST="/project/dtataru/BWB/ancestryinfer/focal_chrom_list.txt"
 cd $WORKDIR
 
 ### SAMPLE INFO ###
-#only create this sample list once
 #echo "Creating current.samples.list file"
 #bcftools query -l hybrids1.par1.maxdepth6000.Chr-01.vcf > current.samples.list
 
@@ -963,7 +957,7 @@ while read CHROM; do
 
     echo "  → Processing chromosome $CHROM"
 
-    INPUT="${INPUTDIR}/hybrids1.par1.maxdepth6000.${CHROM}.vcf_counts.hmmsites1"
+    INPUT="${INPUTDIR}/hybrids1.par1.maxdepth6000.${CHROM}.vcf.v3_counts.hmmsites1"
 
     ### DETERMINE SAMPLE COLUMNS ###
     A_col=$((10 + (SAMPLE_ID-1)*2))
@@ -971,7 +965,7 @@ while read CHROM; do
 
     echo "     Sample columns: A=$A_col   a=$a_col"
 
-    OUTFILE="${WORKDIR}/${SAMPLE_NAME}.${CHROM}.counts.hmmsites1"
+    OUTFILE="${WORKDIR}/${SAMPLE_NAME}.${CHROM}.v2.counts.hmmsites1"
 
     ### Extract first 9 columns + sample's two genotype columns ###
     awk -v A=$A_col -v a=$a_col -v OFS="\t" \
@@ -986,14 +980,27 @@ while read CHROM; do
         -i "$OUTFILE" \
         -s "${SAMPLE_NAME}.${CHROM}.samples" \
         -a 3 0.33 0.33 0.34 \
-        -p 0 -10000 0.33 \
+        -p 0 -1000 0.33 \
         -p 1 -1000 0.33 \
-        -p 2 -500 0.34 \
+        -p 2 -1000 0.34 \
         -e 0.05 -g
 
     echo "Done with $SAMPLE_NAME on $CHROM"
 
+
+ #rename so it doesn't get overwritten
+    mv "${SAMPLE_NAME}.posterior" "${SAMPLE_NAME}.${CHROM}.posterior"
+
 done < "$FOCAL_CHROM_LIST"
+
+### MERGE CHROMOSOMES IN ORDER ###
+echo "Merging chromosome posterior files into final ${SAMPLE_NAME}.posterior"
+
+while read CHROM; do
+    cat "${SAMPLE_NAME}.${CHROM}.posterior" >> "${SAMPLE_NAME}.posterior"
+done < "$FOCAL_CHROM_LIST"
+
+cp "${SAMPLE_NAME}.posterior" "/work/dtataru/HYBRIDS/HMM_POSTPROCESS/${SAMPLE_NAME}.v2.posterior"
 
 echo "ALL COMPLETE for sample $SAMPLE_NAME"
 
