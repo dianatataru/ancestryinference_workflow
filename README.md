@@ -371,11 +371,11 @@ for line in output_lines:
     print(line)
 
 # Report stats to STDERR
-sys.stderr.write("\n=== Species counts BEFORE thinning ===\n")
+sys.stderr.write("\n Species counts BEFORE thinning \n")
 for sp, c in species_counts_before.items():
     sys.stderr.write(f"{sp}\t{c}\n")
 
-sys.stderr.write("\n=== Species counts AFTER thinning ===\n")
+sys.stderr.write("\n Species counts AFTER thinning \n")
 for sp, c in species_counts_after.items():
     sys.stderr.write(f"{sp}\t{c}\n")
 sys.stderr.write("\n")
