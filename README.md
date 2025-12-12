@@ -4,11 +4,11 @@ Alterations to the Schumer Lab's threeway ancestryinfer program (https://github.
 Written by: Diana Tataru
 Created: June 11, 2025
 
-## 0. Create AIMS: Run genotype_filterv4.sh
+## 0. Create AIMS: Run 0_genotype_filter_finalDT.sh
 
-This script is adapted for three species from the following manuscript: Fluctuating reproductive isolation and stable ancestry structure in a fine-scaled mosaic of #hybridizing Mimulus monkeyflowers" by Matthew Farnitano, Keith Karoly, and Andrea Sweigart, and github: https://github.com/mfarnitano/CAC_popgen/#blob/main/reference_panels/genotype_filter.sh  
+This script is adapted for three species from the following manuscript: Fluctuating reproductive isolation and stable ancestry structure in a fine-scaled mosaic of hybridizing Mimulus monkeyflowers" by Matthew Farnitano, Keith Karoly, and Andrea Sweigart, and github: https://github.com/mfarnitano/CAC_popgen/#blob/main/reference_panels/genotype_filter.sh  
 
-Located in ```project/dtataru/lac_nas_gut/AIMS```. This script creates a file with ancestry informative sites (AIMs) from 5 allopatric populations each of three species: *M. guttatus, M.laciniatus,* and *M. nasutus*. Input file for it is a joint genotyped vcf ```lacnasgut_jointgeno.vcf.gz```, created using the Ferris Lab GATK variant calling pipeline, using TOLv5 of *M. guttatus* as the reference. These are the populations used:
+These are the populations used for my AIMs:
 
 |    Species    |  Pop |    SRA     | Longitude  | Latitude  |
 |    -------    | ---  | ---------  | ---------  | --------  |
@@ -29,17 +29,357 @@ Located in ```project/dtataru/lac_nas_gut/AIMS```. This script creates a file wi
 | M. nasutus	| NHN  | SRX525051	| -124.16	 | 49.273    |
 | M. nasutus	| CACN | SRR1259271	| -121.3667	 | 45.71076  |
 
-To visualize distribution of AIMs genomewide, run ```visualizeAIMs.R ```. This also outputs number of AIMS per chromosome:
+Located in ```project/dtataru/lac_nas_gut/AIMS```. This script creates a file with ancestry informative sites (AIMs) from 5 allopatric populations each of three species: *M. guttatus, M.laciniatus,* and *M. nasutus*. Input file for it is a joint genotyped vcf ```lacnasgut_jointgeno.vcf.gz```, created using the Ferris Lab GATK variant calling pipeline, with TOLv5 of *M. guttatus* as the reference. This is the current version of the script:
 
-| Chr01 | Chr02 | Chr03 | Chr04 | Chr05 | Chr06 | Chr07 | Chr08 | Chr09 | Chr10 | Chr11 | Chr12 | Chr13 | Chr14 |
-| ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
-|  9260 | 15019 | 11090 | 17851 | 13041 | 16073 | 8709  | 20077 | 10296 | 15111 | 11289 | 14642 | 15133 | 25823 | 
+```
+#!/bin/bash
+#SBATCH --job-name=genotype_filter                     
+#SBATCH --output=/project/dtataru/lac_nas_gut/AIMS/logs/genotype_filter_%j.out
+#SBATCH --error=/project/dtataru/lac_nas_gut/AIMS/logs/genotype_filter_%j.err
+#SBATCH --time=24:00:00 
+#SBATCH -p single
+#SBATCH -N 1
+#SBATCH --cpus-per-task=12
+#SBATCH -A loni_ferrislac
 
-number of AIMS per chromosome for v2:
+###SETUP
+PROJECT=lacnasgut
+BATCH_NAME=lacnasgut_panel
 
-| Chr01 | Chr02 | Chr03 | Chr04 | Chr05 | Chr06 | Chr07 | Chr08 | Chr09 | Chr10 | Chr11 | Chr12 | Chr13 | Chr14 |
-| ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
-|33172  |55669  |41019  |64583  |48556  |60589  | 33813 | 74756 | 41348 | 57280 | 43404 | 56877 | 54787 | 95319 | 
+SCRIPTS_DIR=/project/dtataru/lac_nas_gut/AIMS
+LOG_DIR=/project/dtataru/lac_nas_gut/AIMS/logs
+WORKING_DIR=/project/dtataru/lac_nas_gut/AIMS
+VCF_DIR=/project/dtataru/lac_nas_gut/4_ref/3_Genotyped_GVCFs
+TMPDIR=/work/dtataru/AIMS
+
+GENOME=/project/dtataru/hybrids/ancestryinfer/reference_genomes/MguttatusTOL_551_v5.0.fa
+REPEATMASK=/project/dtataru/lac_nas_gut/AIMS/MguttatusTOL_551_v5.0.repeatmasked_assembly_v5.0.gff3
+
+NTHREADS=32
+MEM=120
+
+#inputs
+RAW_VCF=${VCF_DIR}/lacnasgut_jointgeno.vcf.gz
+GROUP=panel15
+REFCODE=TOL551
+PREFIX=${WORKING_DIR}/VCFs/${GROUP}.${REFCODE}
+
+cd $WORKING_DIR
+
+###MODULES
+module load gatk/4.5.0.0
+
+###create chr_list
+printf "\n...creating chromosome list\n" | tee >(cat >&2)
+if [ ! -f ${WORKING_DIR}/chr_positions.list ]; then
+       head -n14 ${GENOME}.fai | awk '{print $1 ":1-"$2}' > ${WORKING_DIR}/chr_positions.list
+fi
+
+printf "\n...extracting biallelic SNPs\n" | tee >(cat >&2)
+gatk --java-options "-Xmx${MEM}G" SelectVariants -V ${RAW_VCF} \
+       -select-type SNP --restrict-alleles-to BIALLELIC -O ${PREFIX}.SNPs.vcf.gz
+
+printf "\n...extracting invariant sites\n" | tee >(cat >&2)
+gatk --java-options "-Xmx${MEM}G" SelectVariants -V ${RAW_VCF} \
+       -select-type NO_VARIATION -O ${PREFIX}.INVTs.vcf.gz
+
+printf "\n...filtering SNPs\n" | tee >(cat >&2)
+gatk --java-options "-Xmx${MEM}G" VariantFiltration -V ${PREFIX}.SNPs.vcf.gz -O ${PREFIX}.SNPs.f.vcf.gz \
+       -filter "QD < 2.0" --filter-name "QD2" \
+       -filter "QUAL < 40.0" --filter-name "QUAL40" \
+       -filter "SOR > 3.0" --filter-name "SOR4" \
+       -filter "FS > 60.0" --filter-name "FS60" \
+       -filter "MQ < 40.0" --filter-name "MQ40" \
+       -filter "MQRankSum < -12.5" --filter-name "MQRankSum-12.5" \
+       -filter "ReadPosRankSum < -12.5" --filter-name "ReadPosRankSum-12.5" \
+       -filter "ReadPosRankSum > 12.5" --filter-name "ReadPosRankSum12.5" \
+       --verbosity ERROR
+
+printf "\n...filtering INVTs\n" | tee >(cat >&2)
+gatk --java-options "-Xmx${MEM}g" VariantFiltration -V ${PREFIX}.INVTs.vcf.gz -O ${PREFIX}.INVTs.f.vcf.gz \
+       -filter "QD < 2.0" --filter-name "QD2" \
+       -filter "SOR > 3.0" --filter-name "SOR4" \
+       -filter "MQ < 40.0" --filter-name "MQ40" \
+       --verbosity ERROR
+
+printf "\n...sorting SNPs\n" | tee >(cat >&2)
+gatk --java-options "-Xmx${MEM}G" SortVcf \
+       -I ${PREFIX}.SNPs.f.vcf.gz -use_jdk_inflater --TMP_DIR ${TMPDIR} \
+       -SD ${GENOME}.dict -O ${PREFIX}.SNPs.fs.vcf.gz
+
+printf "\n...sorting INVTs\n" | tee >(cat >&2)
+gatk --java-options "-Xmx${MEM}G" SortVcf \
+       -I ${PREFIX}.INVTs.f.vcf.gz -SD ${GENOME}.dict -O ${PREFIX}.INVTs.fs.vcf.gz
+
+printf "\n...selecting passing SNPs\n" | tee >(cat >&2)
+gatk --java-options "-Xmx${MEM}G" SelectVariants \
+       -V ${PREFIX}.SNPs.fs.vcf.gz --exclude-filtered -O ${PREFIX}.SNPs.fsp.vcf.gz
+
+printf "\n...selecting passing INVTs\n" | tee >(cat >&2)
+gatk --java-options "-Xmx${MEM}G" SelectVariants \
+       -V ${PREFIX}.INVTs.fs.vcf.gz --exclude-filtered -O ${PREFIX}.INVTs.fsp.vcf.gz
+
+module purge
+module load vcftools/0.1.16
+module load htslib/1.21
+
+printf "\n...prepare bed file of repeat-masked regions\n" | tee >(cat >&2)
+printf '#chrom\tchromStart\tchromEnd\n' > ${REPEATMASK}.bed
+cut -f1,4,5 ${REPEATMASK} >> ${REPEATMASK}.bed
+
+printf "\n...filter individual SNP genotypes by depth and GQ, and exclude repeat-masked regions\n" | tee >(cat >&2)
+vcftools --gzvcf ${PREFIX}.SNPs.fsp.vcf.gz -c --minGQ 15 --minDP 6 --maxDP 100 \
+       --exclude-bed ${REPEATMASK}.bed \
+       --recode --recode-INFO-all | bgzip -c > ${PREFIX}.SNPs.fspi.rm.vcf.gz
+
+printf "\n...filter individual INVT genotypes by depth\n" | tee >(cat >&2)
+vcftools --gzvcf ${PREFIX}.INVTs.fsp.vcf.gz -c --minDP 6 --maxDP 100 \
+       --exclude-bed ${REPEATMASK}.bed \
+       --recode --recode-INFO-all | bgzip -c > ${PREFIX}.INVTs.fspi.rm.vcf.gz
+
+tabix -p vcf ${PREFIX}.SNPs.fspi.rm.vcf.gz
+tabix -p vcf ${PREFIX}.INVTs.fspi.rm.vcf.gz
+
+module purge
+module load gatk/4.5.0.0
+
+printf "\n...merge SNP and INVT sites\n" | tee >(cat >&2)
+gatk --java-options "-Xmx${MEM}G" MergeVcfs \
+       -I ${PREFIX}.SNPs.fspi.rm.vcf.gz -I ${PREFIX}.INVTs.fspi.rm.vcf.gz \
+       -O ${PREFIX}.merged.fspi.rm.vcf.gz
+
+printf "\n...sort merged VCF\n" | tee >(cat >&2)
+gatk --java-options "-Xmx${MEM}G" SortVcf \
+       -I ${PREFIX}.merged.fspi.rm.vcf.gz \
+       -SD ${GENOME}.dict -O ${PREFIX}.merged.fspi.rm.vcf.gz
+
+printf "\n...filter SNPs by mincalled\n" | tee >(cat >&2)
+gatk --java-options "-Xmx${MEM}G" SelectVariants -V ${PREFIX}.SNPs.fspi.rm.vcf.gz \
+       --max-nocall-number 7 --exclude-filtered -O ${PREFIX}.SNPs.fspi.rm.31called.vcf.gz
+
+printf "\n...filter merged VCF by mincalled\n" | tee >(cat >&2)
+gatk --java-options "-Xmx${MEM}G" SelectVariants -V ${PREFIX}.merged.fspi.rm.vcf.gz \
+       --max-nocall-number 7 --exclude-filtered -O ${PREFIX}.merged.fspi.rm.31called.vcf.gz
+
+printf "\n...making genotype tables\n" | tee >(cat >&2)
+module purge
+module load bcftools/1.18
+
+printf 'CHROM\tPOS\tREF\tALT\t' > ${PREFIX}.SNPs.fspi.rm.table
+printf 'CHROM\tPOS\tREF\tALT\t' > ${PREFIX}.merged.fspi.rm.table
+
+bcftools query -l ${PREFIX}.SNPs.fspi.rm.vcf.gz | tr '\n' '\t' >> ${PREFIX}.SNPs.fspi.rm.table
+bcftools query -l ${PREFIX}.merged.fspi.rm.vcf.gz | tr '\n' '\t' >> ${PREFIX}.merged.fspi.rm.table
+
+printf '\n' >> ${PREFIX}.SNPs.fspi.rm.table
+printf '\n' >> ${PREFIX}.merged.fspi.rm.table
+
+bcftools query -f '%CHROM\t%POS\t%REF\t%ALT[\t%GT]\n' ${PREFIX}.SNPs.fspi.rm.vcf.gz >> ${PREFIX}.SNPs.fspi.rm.table
+bcftools query -f '%CHROM\t%POS\t%REF\t%ALT[\t%GT]\n' ${PREFIX}.merged.fspi.rm.vcf.gz >> ${PREFIX}.merged.fspi.rm.table
+
+### filtering, edits starting here made by Diana Tataru, December 2025 ###
+
+module load python3
+
+python ${SCRIPTS_DIR}/genocounts_groups_threeway_v4.py ${WORKING_DIR}/lacnasgut_pops.txt ${PREFIX}.SNPs.fspi.rm.table > ${PREFIX}.SNPs.fspi.rm.counts.v5.txt
+
+awk -v OFS='\t' 'NR>1 {print $1,$2,$3,$4,$5,$6,$9,$10,$13,$14}' \
+    ${PREFIX}.SNPs.fspi.rm.counts.v5.txt \
+    > ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.txt
+
+printf "\n...make a column with species classification\n" | tee >(cat >&2)
+awk 'NR>1 {
+    g=$6; n=$8; l=$10;
+
+    max=g; species="guttatus";
+
+    if (n>max) {max=n; species="nasutus"}
+    if (l>max) {species="laciniatus"}
+
+    print $0 "\t" species
+}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v5.txt \
+   > panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v5.species.txt
+
+printf "\n...balance number of aims by species density in 100kb windows\n" | tee >(cat >&2)
+python ${SCRIPTS_DIR}/thin_by_specieswindows.py ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.species.txt 100000 \
+    >  ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.speciesdensity.txt \
+    2> thinning.stats
+
+sort -k1,1V -k2,2n ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.speciesdensity.txt > ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.speciesdensitysorted.txt
+
+printf "\n...edited to remove underscore in chromosome\n" | tee >(cat >&2)
+awk 'BEGIN{OFS="\t"} {gsub(/Chr_/,"Chr-",$1); print $1, $2, $3, $4}' \
+    ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.speciesdensitysorted.txt \
+    > /project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.v3.txt
+
+awk 'BEGIN{OFS="\t"} {gsub(/Chr_/,"Chr-",$1); print $1, $2, $5, $6, $7, $8, $9, $10}' \
+    ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.speciesdensitysorted.txt \
+    > /project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.v3.txt
+```
+These are the two scripts called above, genocounts_groups_threeway_v4.py:
+
+```
+#!/usr/bin/python
+
+import sys
+
+popfile = sys.argv[1]        # pop/species assignment
+genofile = sys.argv[2]       # merged genotype table
+min_prop_diff = 0.8          # threshold for AIM calling
+
+# Load populations for species mapping
+pop2species = {}
+species_list = []
+
+with open(popfile) as f:
+    for line in f:
+        pop, species = line.strip().split()
+        pop2species[pop] = species
+        if species not in species_list:
+            species_list.append(species)
+
+# Count number of AIMs for each species
+highest_alt_counts = {sp: 0 for sp in species_list}
+
+# Print header
+cols = ["CHROM","POS","REF","ALT"]
+for sp in species_list:
+    cols += [f"{sp}_ref", f"{sp}_alt", f"{sp}_na", f"{sp}_nsamples"]
+print("\t".join(cols))
+
+# Process genotypes
+with open(genofile) as f:
+    header = f.readline().strip().split()
+    sample_species = [pop2species.get(s, "NA") for s in header[4:]]
+    
+    for line in f:
+        entries = line.strip().split()
+        chrom, pos, ref, alt = entries[:4]
+        genos = entries[4:]
+        
+        counts = {sp: {"ref":0,"alt":0,"na":0,"n":0} for sp in species_list}
+        
+        for g, sp in zip(genos, sample_species):
+            counts[sp]["n"] += 1
+            if g in ["0/0","0|0"]:
+                counts[sp]["ref"] += 2
+            elif g in ["0/1","1/0","0|1","1|0"]:
+                counts[sp]["ref"] += 1
+                counts[sp]["alt"] += 1
+            elif g in ["1/1","1|1"]:
+                counts[sp]["alt"] += 2
+            else:  # ./.
+                counts[sp]["na"] += 1
+        
+        # Compute ALT freq and only keep if >0.9 difference
+        
+        props = {}
+        valid_site = True
+        for sp in species_list:
+            total = counts[sp]["ref"] + counts[sp]["alt"]
+            if total == 0:
+                valid_site = False   # Remove site if any species has zero counts
+                break
+            props[sp] = counts[sp]["alt"] / total
+
+        if valid_site:
+            # Count species with alt frequency >= 0.9
+            high_alt_species = [sp for sp, p in props.items() if p >= 0.9]
+
+            # Remove site if more than one species is high-alt
+            if len(high_alt_species) == 1:
+                max_prop = max(props.values())
+                min_prop = min(props.values())
+        
+                # Keep site only if difference >= 0.9
+                if (max_prop - min_prop) >= 0.9:
+                    winner = high_alt_species[0]
+                    highest_alt_counts[winner] += 1
+            
+                    out = [chrom, pos, ref, alt]
+                    for sp in species_list:
+                        c = counts[sp]
+                        out += [str(c["ref"]), str(c["alt"]), str(c["na"]), str(c["n"])]
+                    print("\t".join(out))
+
+# Print number of AIMs for each species
+print("Total high-ALT SNPs per species:", highest_alt_counts, file=sys.stderr)
+```
+and thin_by_specieswindows.py:
+
+```
+#!/usr/bin/python
+
+import sys
+import random
+from collections import defaultdict
+
+if len(sys.argv) < 3:
+    print("Usage: python thin_equal_density.py aims.txt window_size > thinned.txt")
+    sys.exit(1)
+
+infile = sys.argv[1]
+WINDOW = int(sys.argv[2])
+
+random.seed(42)
+
+# windows[(chrom, window_index)][species] = list of lines
+windows = defaultdict(lambda: defaultdict(list))
+
+species_counts_before = defaultdict(int)
+species_counts_after = defaultdict(int)
+
+with open(infile) as f:
+    for line in f:
+        if not line.strip():
+            continue
+
+        fields = line.strip().split()
+        chrom = fields[0]
+        pos = int(fields[1])
+        species = fields[10]      # last column
+
+        species_counts_before[species] += 1
+
+        win = pos // WINDOW
+        windows[(chrom, win)][species].append(line.strip())
+
+output_lines = []
+
+# Process each window
+for key, species_dict in windows.items():
+    # Count number of sites per species in this window
+    counts = {sp: len(species_dict[sp]) for sp in species_dict}
+
+    if not counts:
+        continue
+
+    # Minimum count across species in this window
+    target = min(counts.values())
+
+    # Randomly select target number of sites per species
+    for sp, lines in species_dict.items():
+        keep_n = min(target, len(lines))
+        kept = random.sample(lines, keep_n)
+
+        for site in kept:
+            species_counts_after[sp] += 1
+            output_lines.append(site)
+
+# Output thinned dataset
+for line in output_lines:
+    print(line)
+
+# Report stats to STDERR
+sys.stderr.write("\n=== Species counts BEFORE thinning ===\n")
+for sp, c in species_counts_before.items():
+    sys.stderr.write(f"{sp}\t{c}\n")
+
+sys.stderr.write("\n=== Species counts AFTER thinning ===\n")
+for sp, c in species_counts_after.items():
+    sys.stderr.write(f"{sp}\t{c}\n")
+sys.stderr.write("\n")
+```
 
 Additional files needed to run this:
 Located in ```/project/dtataru/lac_nas_gut/AIMS```. This has multiple input files that need to be created and changed.   
@@ -49,39 +389,31 @@ Located in ```/project/dtataru/lac_nas_gut/AIMS```. This has multiple input file
       2.  Mnasutusvar_SF_822_v2.0.fa  
       3.  WLF47.fasta (consensus genome made by me with high coverage unpub. sequencing data  
 
+To visualize distribution of AIMs genomewide, run ```visualizeAIMs.R ```. This also outputs number of AIMS per chromosome. This is aims_v1:
 
-First time around ended up with 698623 remaining_sites.txt, then after filtering to sites uniquely fixed to each species and only one AIM for every 100 bp, ended up wtih 203414. Need to revisit this filtering step because I'm worries that those many sites that weren't fixed were mostly guttatus and then when I subset I ended up with very few laciniatus sites. Let me investigate in the aims file briefly:
+| Chr01 | Chr02 | Chr03 | Chr04 | Chr05 | Chr06 | Chr07 | Chr08 | Chr09 | Chr10 | Chr11 | Chr12 | Chr13 | Chr14 |
+| ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
+|  9260 | 15019 | 11090 | 17851 | 13041 | 16073 | 8709  | 20077 | 10296 | 15111 | 11289 | 14642 | 15133 | 25823 | 
 
-Number of guttatus Alt Counts: 730625 (Ref=907553, total=1,638,178)
-awk '{ sum += $6 } END { print sum }' AIMs_panel15_final.AIMs.txt
+number of AIMS per chromosome for aims_v2:
 
-Number of laciniatus Alt Counts: 1053592 (Ref=642072, total=1,695,664)
-awk '{ sum += $8 } END { print sum }' AIMs_panel15_final.AIMs.txt
+| Chr01 | Chr02 | Chr03 | Chr04 | Chr05 | Chr06 | Chr07 | Chr08 | Chr09 | Chr10 | Chr11 | Chr12 | Chr13 | Chr14 |
+| ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
+|33172  |55669  |41019  |64583  |48556  |60589  | 33813 | 74756 | 41348 | 57280 | 43404 | 56877 | 54787 | 95319 | 
 
-Number of nasutus Alt Counts: 1576401 (Ref- 254823, total= 1,831,224)
-awk '{ sum += $11 } END { print sum }' AIMs_panel15_final.AIMs.txt
+### Editing different versions of AIMs (currently using aims_v5)
 
-Okay, so something is off here, still, and I think it has to do with the way sites were subset or some way that ref/alt is being called. I think I want to try to run this with the full set up unthinned AIMS that I got, with 1267995 total sites. After running this it is still off.
+For aims_v1, ended up with 698623 remaining_sites.txt, then after filtering to sites uniquely fixed to each species and only one AIM for every 100 bp, ended up with 203414 sites. Need to revisit this filtering step because I'm worries that those many sites that weren't fixed were mostly guttatus and then when I subset I ended up with very few laciniatus sites. I think it has to do with the way sites were subset or some way that ref/alt is being called. I think I want to try to run this with the full set up unthinned AIMS that I got, with 1267995 total sites. After running this it is still off.
 
-```
-cd /project/dtataru/lac_nas_gut/AIMS/VCFs
+I found a typo in my script which meant that nasutus counts were being called incorrectly. Also, it was not picking up whether the alt allele was the one identified in the AIMS, so I changed code to only match counts when the ref and alt from AIMs match those in the vcf. Lastly, I edited it so that when genotype call is: 0/0 = 2 0, 0/1 = 1 1, 1/1 = 0 2. I fixed these and reran (panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v2.filtered.thinned.txt), ended up with 800357 sites, and am now going to rerun them through steps 3 and 4, with 4 having different HMM priors. 
 
-awk 'BEGIN{OFS="\t"} {gsub(/Chr_/,"Chr-",$1); print $1, $2, $3, $4}' \
-    panel15.TOL551.SNPs.fspi.rm.AIMs_counts.filtered.txt \
-    > /project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.full.txt
-
-awk 'BEGIN{OFS="\t"} {gsub(/Chr_/,"Chr-",$1); print $1, $2, $5, $6, $7, $8}' \
-    panel15.TOL551.SNPs.fspi.rm.AIMs_counts.filtered.txt \
-    > /project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.full.txt
-```
-I found a typo in my genotype_filterv4.sh which meant that nasutus counts were being called incorrectly. Also, it was not picking up whether the alt allele was the one identified in the AIMS, so I changed code to only match counts when the ref and alt from AIMs match those in the vcf. Lastly, I edited it so that when genotype call is: 0/0 = 2 0, 0/1 = 1 1, 1/1 = 0 2. I fixed these and reran, ended up with 800357 sites, and am now going to rerun steps 3 and 4, with 4 having different HMM priors. I reran it and everything came up looking like 50% laciniatus, 50% nasutus. I think it has to do with this filtering line of code in my 0_genotype_filter_finalDT.sh script:
+I reran it and everything came up looking like 50% laciniatus, 50% nasutus. I think it has to do with this filtering line of code in my 0_genotype_filter_finalDT.sh script:
 ```
 awk '($5 != 0 || $7 != 0 || $9 != 0)' ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v2.txt > ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v2.filtered.txt
 ```
 The goal of this line is to remove sites where all sites have the alternate allele, by removing sites where all species REF counts are 0, but that is not actually what I want. I actually want to just keep sites where the alt is unique to the species. 
 
-Additionally, these line of code in genocounts_group_threeway.py are trying to filter but incorrectly because it doesn't account for the third species propotrtion.
-
+Additionally, these lines of code in genocounts_group_threeway.py are trying to filter but incorrectly because it doesn't account for the third species proportion:
 ```
 # Check that each species has at least one called allele
         if all((counts[sp]["ref"] + counts[sp]["alt"]) > 0 for sp in species_list):
@@ -96,8 +428,7 @@ Additionally, these line of code in genocounts_group_threeway.py are trying to f
                     out += [str(c["ref"]), str(c["alt"]), str(c["na"]), str(c["n"])]
                 print("\t".join(out))
 ```
-We want to do something similar to banarjee et al. 2023, "We thinned to an approximately equivalent number of informative sites between all pairs of species. To do so, we retained all ancestry-informative sites that distinguished X. birchmanni and X. malinche, and every other site that distinguished X. variatus from either of these two species."
-changing that code to to:
+We want to do something similar to banarjee et al. 2023, "We thinned to an approximately equivalent number of informative sites between all pairs of species. To do so, we retained all ancestry-informative sites that distinguished X. birchmanni and X. malinche, and every other site that distinguished X. variatus from either of these two species." To do so I am changing that code to:
 ```
     # Compute ALT proportions for every species
     props = {
@@ -120,12 +451,9 @@ changing that code to to:
 		print("Total high-ALT SNPs per species:", high_alt_counts, file=sys.stderr)
 ```
 
-panel15.TOL551.SNPs.fspi.rm.counts.v3.txt:
-2,746,758 total sites
+panel15.TOL551.SNPs.fspi.rm.counts.v3.txt: 2,746,758 total sites
 Total high-ALT SNPs per species: {'guttatus': 658786, 'nasutus': 1076451, 'laciniatus': 1011520}
-
-Output thinned:
-1,104,019 total sites
+Output thinned: 1,104,019 total sites
 
 Okay, so now I need to figure out how many of these thinned sites are max proportion ALT for each species, and thin to about equal numbers for each. It's still a little unclear to me whether it's better to filter sites before or after thinning. If I filtered before thinning then I would maybe have to thin again.
 
@@ -144,14 +472,12 @@ laciniatus 377015
 nasutus 427369
 guttatus 299634
 
-Not horribly different between species. So, the main difference between these aims and the other ones I used are that these ones contain sites where some species have all 0s. I think I also want to try and filter by sites where all species have at least one count in ref or alt, and call that aims_v4, just in case. 
+Not horribly different between species. So, the main difference between these aims_v3 and aims_v2 are that these ones contain sites where some species have all 0s. I think I do actually want filter by sites where all species have at least one count in ref or alt, and call that aims_v4.
 
 thinned.aims_v4: laciniatus 287938, nasutus 348803, guttatus 131002
 unthinned.aims_v4: {'guttatus': 257533, 'nasutus': 794065, 'laciniatus': 695118}
 
-I think I want to do some species-aware balancing and then thinning to the unthinned.aims_v4. 
-
-first I'll create a column to classify the species:
+I also want to do some species-aware balancing and then thinning to the unthinned.aims_v4. First I'll create a column to classify the species:
 
 ```
 awk 'NR>1 {
@@ -226,25 +552,16 @@ END {
 ```
 total of 490769 sites (771001 before thinning to one AIM per 100 bp), laciniatus 167507, nasutus 171174, guttatus 152087
 
-REDO:
-wrote the script thin_byspecieswindows.py which is supposed to replace the original balancing and thinning scripts. this sets 100 kb windows and finds the species with the least amount of aims in the window and randomly thins to that number of aims. run it using:
+REDOING for aims_v5:
+wrote the script thin_byspecieswindows.py which is supposed to replace the original balancing and thinning scripts. this sets 100 kb windows and finds the species with the least amount of aims in the window and randomly thins to that number of aims, ending up with equal density per species across the genome. run it using:
 ```
 python /project/dtataru/lac_nas_gut/AIMS/thin_by_specieswindows.py panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.species.txt 100000 \
     >  panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesdensity.txt \
     2> thinning.stats
 ```
-=== Species counts AFTER thinning ===
-guttatus        260444
-nasutus 260448
-laciniatus      260445
-total 781,337
+thinning stats: guttatus 260444, nasutus 260448, laciniatus 260445, total 781,337
 
-then sort it:
-```
-sort -k1,1V -k2,2n panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesdensity.txt > panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesdensitysorted.txt
-```
-
-v5 of the aims is created with  genocounts_groups_threeway_v4.py and thin_by_specieswindows.py, and specifically only keeps sites where there is >90% difference in alt allele frequency of highest frequency and lowest frequency species. This ends up being almost equal parts each species across SNPs
+v5 of the aims is created with  genocounts_groups_threeway_v4.py and thin_by_specieswindows.py, and specifically only keeps sites where there is >90% difference in alt allele frequency of highest frequency and lowest frequency species (like in banarjee et al. 2023). This ends up being almost equal parts each species across SNPs.
 
 ## 1. Aligning all samples to three reference genomes
 
