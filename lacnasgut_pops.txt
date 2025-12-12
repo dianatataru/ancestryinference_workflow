@@ -1,0 +1,15 @@
+YVO6_S313	guttatus
+KOOT	nasutus
+CACN9	nasutus
+NHN	nasutus
+DPRN	nasutus
+WLF47	laciniatus
+AHQT1G	guttatus
+HUL	laciniatus
+TRT	laciniatus
+OPN	laciniatus
+PER	laciniatus
+MAR3	guttatus
+LMC24	guttatus
+IM62IV	guttatus
+SF5	nasutus
