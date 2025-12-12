@@ -29,7 +29,7 @@ These are the populations used for my AIMs:
 | M. nasutus	| NHN  | SRX525051	| -124.16	 | 49.273    |
 | M. nasutus	| CACN | SRR1259271	| -121.3667	 | 45.71076  |
 
-Located in ```project/dtataru/lac_nas_gut/AIMS```. This script creates a file with ancestry informative sites (AIMs) from 5 allopatric populations each of three species: *M. guttatus, M.laciniatus,* and *M. nasutus*. Input file for it is a joint genotyped vcf ```lacnasgut_jointgeno.vcf.gz```, created using the Ferris Lab GATK variant calling pipeline, with TOLv5 of *M. guttatus* as the reference. This is the current version of the script:
+Located in ```project/dtataru/lac_nas_gut/AIMS```. This script creates a file with ancestry informative sites (AIMs) from 5 allopatric populations each of three species: *M. guttatus, M.laciniatus,* and *M. nasutus*. Input file for it is a joint genotyped vcf ```lacnasgut_jointgeno.vcf.gz```, created using the Ferris Lab GATK variant calling pipeline, with TOLv5 of *M. guttatus* as the reference. This is the current version of the 0_genotype_filter_finalDT.sh script:
 
 ```
 #!/bin/bash
@@ -809,37 +809,37 @@ THREADS=20
 
 ### CHECK BAM FILES FOR CORRUPTION ###
 #script will fail if there are corrupt bams
-#echo "Checking BAM files for corruption or emptiness..."
-#CORRUPT_COUNT=0
+echo "Checking BAM files for corruption or emptiness..."
+CORRUPT_COUNT=0
 
-#for f in /work/dtataru/TMPDIR/*/*.sorted.pass.unique.bam; do
-#    if ! samtools quickcheck -v "$f"; then
-#        echo "Corrupt or empty file detected: $f"
-#        CORRUPT_COUNT=$((CORRUPT_COUNT+1))
-#    fi
-#done
+for f in /work/dtataru/TMPDIR/*/*.sorted.pass.unique.bam; do
+    if ! samtools quickcheck -v "$f"; then
+        echo "Corrupt or empty file detected: $f"
+        CORRUPT_COUNT=$((CORRUPT_COUNT+1))
+    fi
+done
 
-#if [ $CORRUPT_COUNT -gt 0 ]; then
-#    echo "ERROR: Found $CORRUPT_COUNT corrupt or empty BAM files. Exiting job."
-#    exit 1
-#else
-#    echo "All BAM files passed samtools quickcheck."
-#fi
+if [ $CORRUPT_COUNT -gt 0 ]; then
+    echo "ERROR: Found $CORRUPT_COUNT corrupt or empty BAM files. Exiting job."
+    exit 1
+else
+    echo "All BAM files passed samtools quickcheck."
+fi
 
 ### MERGE ALL BAMS FOR VARIANT CALLING ###
-#echo "Merge BAM files"
-#cd "$BAMDIR"
+echo "Merge BAM files"
+cd "$BAMDIR"
 
-#for P in 1; do
-#	BAM_FILES=($(find "$BAMDIR" -type f -name "*.par${P}.sorted.pass.unique.bam" | sort))
-#	MERGED="${WORKDIR}/hybrids1merged.par${P}.pass.unique.bam"
-#	SORTED="${WORKDIR}/hybrids1merged.par${P}.sorted.pass.unique.bam"
+for P in 1; do
+	BAM_FILES=($(find "$BAMDIR" -type f -name "*.par${P}.sorted.pass.unique.bam" | sort))
+	MERGED="${WORKDIR}/hybrids1merged.par${P}.pass.unique.bam"
+	SORTED="${WORKDIR}/hybrids1merged.par${P}.sorted.pass.unique.bam"
 
-#   	samtools merge -r -c -p -@ ${THREADS} "$MERGED" "${BAM_FILES[@]}"
-#	samtools sort -@ 12 -o "$SORTED" "$MERGED"
-#	samtools index "$SORTED"
-#done
-#echo "BAM files merged"
+   	samtools merge -r -c -p -@ ${THREADS} "$MERGED" "${BAM_FILES[@]}"
+	samtools sort -@ 12 -o "$SORTED" "$MERGED"
+	samtools index "$SORTED"
+done
+echo "BAM files merged"
 
 ```
 Now I am going to run a second script for variant calling that runs an array by chromosome called ```varcall_simple.sh```, setting mak depth to 6000 for about 20x per sample:
@@ -896,7 +896,7 @@ AIMS_BED="${AIMS}.mod.bed"
 COUNTS_BED="${COUNTS}.bed"
 
 #modify aims
-#awk -v OFS='\t' '{print $1"_"$2, $1, $2, $3, $4}' "$AIMS" > "$AIMS_MOD"
+awk -v OFS='\t' '{print $1"_"$2, $1, $2, $3, $4}' "$AIMS" > "$AIMS_MOD"
 
 #modify vcf
 awk '!/^#/ {print $1"_"$2"\t"$0}' "$OUTVCF" > "$VCF_MOD"
@@ -1030,7 +1030,6 @@ cd $WORKING_DIR
 ### Create Input Files ###
 
 current_list="current.posterior.samples.list_${TAG}"
-read_list="current.samples.read.list_${TAG}"
 
 # loop through all .posterior files
 for p in *.posterior; do
@@ -1048,11 +1047,10 @@ done
 
 #remove duplicates
 sort -u "$current_list" -o "$current_list"
-sort -u "$read_list" -o "$read_list"
 
 ### CONVERT TO TSV ###
 
-perl ${PATH_SCRIPTS}/convert_rchmm_to_ancestry_tsv_3way_v2_DT.pl current.posterior.samples.list current.samples.read.list 1 ${FOCAL_CHROM_LIST}
+perl ${PATH_SCRIPTS}/convert_rchmm_to_ancestry_tsv_3way_v2_DT.pl current.posterior.samples.list current.posterior.samples.list 1 ${FOCAL_CHROM_LIST}
 
 echo "Transposing ancestry probabilities"
 perl ${PATH_SCRIPTS}/transpose_tsv.pl ancestry-probs-par1_transposed_Chr-01_Chr-02_Chr-03_Chr-04_Chr-05_Chr-06_Chr-07_Chr-08_Chr-09_Chr-10_Chr-11_Chr-12_Chr-13_Chr-14.tsv
