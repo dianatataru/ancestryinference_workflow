@@ -3,11 +3,11 @@
 #SBATCH --output=/project/dtataru/ancestryinfer/logs/ancestryhmm_%j.out
 #SBATCH --error=/project/dtataru/ancestryinfer/logs/ancestryhmm__%j.err
 #SBATCH --time=05:00:00
-#SBATCH -p workq
+#SBATCH -p single
 #SBATCH -N 1
 #SBATCH --cpus-per-task=12
 #SBATCH -A loni_ferrislac
-#SBATCH --array=251-305%40             # one task = one sample, 305 total samples
+#SBATCH --array=156-305%40             # one task = one sample, 305 total samples
 
 ### LOAD MODULES ###
 module load python/3.11.5-anaconda
@@ -23,7 +23,7 @@ export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:$LD_LIBRARY_PATH
 
 ### ASSIGN VARIABLES ###
 PATH_SCRIPTS="/project/dtataru/ancestryinfer"
-AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.txt"
+AIMS="/project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.full.txt"
 INPUTDIR="/work/dtataru/HYBRIDS/HMM_INPUT"
 WORKDIR="/work/dtataru/HYBRIDS/HMM_OUTPUT"
 FOCAL_CHROM_LIST="/project/dtataru/BWB/ancestryinfer/focal_chrom_list.txt"
@@ -44,7 +44,7 @@ while read CHROM; do
 
     echo "  → Processing chromosome $CHROM"
 
-    INPUT="${INPUTDIR}/hybrids1.par1.maxdepth6000.${CHROM}.vcf_counts.hmmsites1"
+    INPUT="${INPUTDIR}/hybrids1.par1.maxdepth6000.${CHROM}.vcf.v3_counts.hmmsites1"
 
     ### DETERMINE SAMPLE COLUMNS ###
     A_col=$((10 + (SAMPLE_ID-1)*2))
@@ -52,7 +52,7 @@ while read CHROM; do
 
     echo "     Sample columns: A=$A_col   a=$a_col"
 
-    OUTFILE="${WORKDIR}/${SAMPLE_NAME}.${CHROM}.counts.hmmsites1"
+    OUTFILE="${WORKDIR}/${SAMPLE_NAME}.${CHROM}.v2.counts.hmmsites1"
 
     ### Extract first 9 columns + sample's two genotype columns ###
     awk -v A=$A_col -v a=$a_col -v OFS="\t" \
@@ -87,7 +87,7 @@ while read CHROM; do
     cat "${SAMPLE_NAME}.${CHROM}.posterior" >> "${SAMPLE_NAME}.posterior"
 done < "$FOCAL_CHROM_LIST"
 
-cp "${SAMPLE_NAME}.posterior" "/work/dtataru/HYBRIDS/HMM_POSTPROCESS/${SAMPLE_NAME}.posterior"
+cp "${SAMPLE_NAME}.posterior" "/work/dtataru/HYBRIDS/HMM_POSTPROCESS/${SAMPLE_NAME}.v2.posterior"
 
 
 echo "ALL COMPLETE for sample $SAMPLE_NAME"
