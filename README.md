@@ -842,7 +842,7 @@ THREADS=20
 #echo "BAM files merged"
 
 ```
-In this script, the I changed the mpileup step from this to what is current, because default max-depth is 250 and that is way too low for 308 samples at 23x. It timed out after 3 days of trying to make it, though. Now I am going to run a second script for variant calling that runs an array by chromosome called ```varcall_simple.sh```:
+Now I am going to run a second script for variant calling that runs an array by chromosome called ```varcall_simple.sh```, setting mak depth to 6000 for about 20x per sample:
 
 ```
 #!/bin/bash
@@ -911,27 +911,6 @@ perl "${PATH_SCRIPTS}/vcf_counts_to_hmm_DT.pl" "$COUNTS_BED" "$AIM_COUNTS" 0.000
 
 echo "Job Done"
 ```
-
-Number of sites for each Chromosome
-
-|Chrom|# of AIMS|
-|-----|---------|
-|  1  |  8948   |
-|  2  |  14386  |
-|  3  |  10409  |
-|  4  |  17211  |
-|  5  |  12362  |
-|  6  |  15483  |
-|  7  |  8235   |
-|  8  |  18949  |
-|  9  |  10019  |
-|  10 |  14372  |
-|  11 |  10866  |
-|  12 |  13923  |
-|  13 |  14492  |
-|  14 |  24575  |
-
-total 194,230 sites
 
 ### 4. AncestryHMM
 
