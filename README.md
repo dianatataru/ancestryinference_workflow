@@ -1124,3 +1124,6 @@ SHG38
 SHG41
 SHG43
 SHG46
+
+to run interactive job:
+``` salloc --time=6:00:00 --ntasks=12 --nodes=1 --account=loni_ferrislac --partition=single```
