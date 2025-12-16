@@ -1086,17 +1086,15 @@ echo "identified intervals"
 To get ancestry proportions from .posterior files:
 
 ```
+#nasutus
 [dtataru@qbd1 HMM_POSTPROCESS_structureprior]$ awk '{ SUM += $6 + $4/2 + $7/2 } END { print SUM/NR }' SHL22_S118_L001.structureprior.posterior
 0.45845
+#laciiniatus
 (base) [dtataru@qbd1 HMM_POSTPROCESS_structureprior]$ awk '{ SUM += $8 + $5/2 + $7/2 } END { print SUM/NR }' SHL22_S118_L001.structureprior.posterior
 0.539439
+#guttatus
 (base) [dtataru@qbd1 HMM_POSTPROCESS_structureprior]$ awk '{ SUM += $3 + $4/2+$5/2 } END { print SUM/NR }' SHL22_S118_L001.structureprior.posterior
 0.00239084
-
-(base) [dtataru@qbd1 HMM_POSTPROCESS_structureprior]$ awk '{ SUM += $8 + $5/2 + $7/2 } END { print SUM/NR }' SHL24_S125_L001.structureprior.posterior
-0.676238
-(base) [dtataru@qbd1 HMM_POSTPROCESS_structureprior]$ awk '{ SUM += $6 + $4/2 + $7/2 } END { print SUM/NR }' SHL24_S125_L001.structureprior.posterior
-0.0331762
 
 #LACINIATUS
 awk '{ SUM += $8 + $5/2 + $7/2 } END { print SUM/NR }' SHG27_S112_L001.structureprior.posterior
@@ -1127,3 +1125,5 @@ SHG46
 
 to run interactive job:
 ``` salloc --time=6:00:00 --ntasks=12 --nodes=1 --account=loni_ferrislac --partition=single```
+
+So the first run I did with structurepriorse.01 has posterior probability set to 0.8 in post processing scripts, tried to rerun it with 0.09
