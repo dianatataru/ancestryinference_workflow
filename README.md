@@ -1081,3 +1081,46 @@ echo "run intervals R script"
 Rscript ${PATH_SCRIPTS}/identify_intervals_ancestryinfer_DTv2.R genotypes.txt ${PATH_SCRIPTS}
 echo "identified intervals"
 ```
+### Notes on runs with priors from Fastructure
+
+To get ancestry proportions from .posterior files:
+
+```
+[dtataru@qbd1 HMM_POSTPROCESS_structureprior]$ awk '{ SUM += $6 + $4/2 + $7/2 } END { print SUM/NR }' SHL22_S118_L001.structureprior.posterior
+0.45845
+(base) [dtataru@qbd1 HMM_POSTPROCESS_structureprior]$ awk '{ SUM += $8 + $5/2 + $7/2 } END { print SUM/NR }' SHL22_S118_L001.structureprior.posterior
+0.539439
+(base) [dtataru@qbd1 HMM_POSTPROCESS_structureprior]$ awk '{ SUM += $3 + $4/2+$5/2 } END { print SUM/NR }' SHL22_S118_L001.structureprior.posterior
+0.00239084
+
+(base) [dtataru@qbd1 HMM_POSTPROCESS_structureprior]$ awk '{ SUM += $8 + $5/2 + $7/2 } END { print SUM/NR }' SHL24_S125_L001.structureprior.posterior
+0.676238
+(base) [dtataru@qbd1 HMM_POSTPROCESS_structureprior]$ awk '{ SUM += $6 + $4/2 + $7/2 } END { print SUM/NR }' SHL24_S125_L001.structureprior.posterior
+0.0331762
+
+#LACINIATUS
+awk '{ SUM += $8 + $5/2 + $7/2 } END { print SUM/NR }' SHG27_S112_L001.structureprior.posterior
+#NASUTUS
+awk '{ SUM += $6 + $4/2 + $7/2 } END { print SUM/NR }' SHG27_S112_L001.structureprior.posterior
+#GUTATTUS
+awk '{ SUM += $3 + $4/2+$5/2 } END { print SUM/NR }' SHG27_S112_L001.structureprior.posterior
+```
+
+How to find out which samples are missing faststructure calls:
+```
+comm -23 \
+  <(awk '{print $1}' /work/dtataru/HYBRIDS/HMM_POSTPROCESS/current.posterior.samples.list_Chr-01_Chr-02_Chr-03_Chr-04_Chr-05_Chr-06_Chr-07_Chr-08_Chr-09_Chr-10_Chr-11_Chr-12_Chr-13_Chr-14 | cut -d'_' -f1 | sort -u) \
+  <(awk '{print $1}' structure_priors.txt | sort -u)
+```
+Missing:
+GBG15
+GBG6
+GBL40
+GBN37
+HHL34
+HHL40
+SHG34
+SHG38
+SHG41
+SHG43
+SHG46
