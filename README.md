@@ -561,7 +561,12 @@ python /project/dtataru/lac_nas_gut/AIMS/thin_by_specieswindows.py panel15.TOL55
 ```
 thinning stats: guttatus 260444, nasutus 260448, laciniatus 260445, total 781,337
 
-v5 of the aims is created with  genocounts_groups_threeway_v4.py and thin_by_specieswindows.py, and specifically only keeps sites where there is >90% difference in alt allele frequency of highest frequency and lowest frequency species (like in banarjee et al. 2023). This ends up being almost equal parts each species across SNPs.
+v5 of the aims is created with  genocounts_groups_threeway_v4.py and thin_by_specieswindows.py, and specifically only keeps sites where there is >90% difference in alt allele frequency of highest frequency and lowest frequency species (like in banarjee et al. 2023). This ends up being almost equal parts each species across SNPs. The output of this is the HMM_POSTPROCESS_structurepriors
+
+v6 of the aims is created with  genocounts_groups_threeway_v6.py and thin_by_specieswindows.py, and specifically only keeps sites where ref or alt counts per species is less than 3 or greater than 7, removing sites with intermediate calls.
+
+v7 (607303 total sites) of the aims is created with  genocounts_groups_threeway_v7.py and thin_by_specieswindows.py, and specifically only keeps sites where total counts per species is less than 3 or greater than 7, removing some sites with low or intermediate calls. It also decides a species site by highest minor allele frequency, not by ALT, which hopefully means we'll have more guttatus sites, but also overall more stringent calls.
+
 
 ## 1. Aligning all samples to three reference genomes
 
@@ -1126,4 +1131,4 @@ SHG46
 to run interactive job:
 ``` salloc --time=6:00:00 --ntasks=12 --nodes=1 --account=loni_ferrislac --partition=single```
 
-So the first run I did with structurepriorse.01 has posterior probability set to 0.8 in post processing scripts, tried to rerun it with 0.09
+So the first run I did with structurepriorse.01 has posterior probability set to 0.8 in post processing scripts, tried to rerun it with 0.09, which made a slight but not major difference in how ancestry was called. Probably best to stick with 0.9.
