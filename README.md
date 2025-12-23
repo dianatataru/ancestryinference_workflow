@@ -1132,11 +1132,25 @@ to run interactive job:
 ``` 
 salloc --time=6:00:00 --ntasks=12 --nodes=1 --account=loni_ferrislac --partition=single
 
+#to use htslib to zip/unzip vcfs
 module load python/3.11.5-anaconda
 conda create -n htislib #environment location: /home/dtataru/.conda/envs/htislib
 conda activate htislib
 conda install bioconda::htslib
-tabix hybrids1.par1.vcf.gz
+
+#the vcf.gz were gzip not bgzipped so I have to run this:
+for f in hybrids1.par1.maxdepth6000.Chr-*.vcf.gz; do
+  zcat "$f" | bgzip > tmp.vcf.gz
+  mv tmp.vcf.gz "$f"
+  tabix -p vcf "$f"
+done
+
+#to concatonate the chromsome-level vcf
+module load bcftools
+
+bcftools concat -n -Oz -o hybrids1.par1.maxdep6000.vcf.gz hybrids1.par1.maxdepth6000.Chr-01.vcf.gz hybrids1.par1.maxdepth6000.Chr-02.vcf.gz hybrids1.par1.maxdepth6000.Chr-03.vcf.gz hybrids1.par1.maxdepth6000.Chr-04.vcf.gz hybrids1.par1.maxdepth6000.Chr-05.vcf.gz hybrids1.par1.maxdepth6000.Chr-06.vcf.gz hybrids1.par1.maxdepth6000.Chr-07.vcf.gz hybrids1.par1.maxdepth6000.Chr-08.vcf.gz hybrids1.par1.maxdepth6000.Chr-09.vcf.gz hybrids1.par1.maxdepth6000.Chr-10.vcf.gz hybrids1.par1.maxdepth6000.Chr-11.vcf.gz hybrids1.par1.maxdepth6000.Chr-12.vcf.gz hybrids1.par1.maxdepth6000.Chr-13.vcf.gz hybrids1.par1.maxdepth6000.Chr-14.vcf.gz
+
+gunzip hybrids1.par1.maxdep6000.vcf.gz
 ```
 
 So the first run I did with structurepriorse.01 has posterior probability set to 0.8 in post processing scripts, tried to rerun it with 0.09, which made a slight but not major difference in how ancestry was called. Probably best to stick with 0.9.
