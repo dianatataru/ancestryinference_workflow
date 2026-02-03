@@ -955,6 +955,23 @@ SAMPLE_ID=$SLURM_ARRAY_TASK_ID
 SAMPLE_NAME=$(sed -n "${SAMPLE_ID}p" "${INPUTDIR}/current.samples.list" | awk '{print $1}')
 echo "Processing SAMPLE: $SAMPLE_NAME    SAMPLE_ID=$SAMPLE_ID"
 
+### Define priors from fastStructure ###
+PARAM_FILE="/project/dtataru/ancestryinfer/structure_priors.txt"
+
+read p1 p2 p3 < <(
+    awk -v s="$SAMPLE_PREFIX" '
+        $1 == s { print $2, $3, $4; found=1; exit }
+        END { if (!found) exit 1 }
+    ' "$PARAM_FILE"
+)
+
+if [[ -z "$p1" || -z "$p2" || -z "$p3" ]]; then
+    echo "ERROR: No priors found for sample prefix $SAMPLE_PREFIX (sample $SAMPLE_NAME)" >&2
+    exit 1
+fi
+
+echo "Using priors for $SAMPLE_NAME ($SAMPLE_PREFIX): p1=$p1 p2=$p2 p3=$p3"
+
 ### RUN HMM ###
 
 ### LOOP OVER CHROMS ###
@@ -962,7 +979,7 @@ while read CHROM; do
 
     echo "  → Processing chromosome $CHROM"
 
-    INPUT="${INPUTDIR}/hybrids1.par1.maxdepth6000.${CHROM}.vcf.v3_counts.hmmsites1"
+    INPUT="${INPUTDIR}/hybrids1.par1.maxdepth6000.${CHROM}.vcf.v6_counts.hmmsites1"
 
     ### DETERMINE SAMPLE COLUMNS ###
     A_col=$((10 + (SAMPLE_ID-1)*2))
@@ -970,7 +987,7 @@ while read CHROM; do
 
     echo "     Sample columns: A=$A_col   a=$a_col"
 
-    OUTFILE="${WORKDIR}/${SAMPLE_NAME}.${CHROM}.v2.counts.hmmsites1"
+    OUTFILE="${WORKDIR}/${SAMPLE_NAME}.${CHROM}.v6.counts.hmmsites1"
 
     ### Extract first 9 columns + sample's two genotype columns ###
     awk -v A=$A_col -v a=$a_col -v OFS="\t" \
@@ -984,11 +1001,11 @@ while read CHROM; do
     ancestry_hmm \
         -i "$OUTFILE" \
         -s "${SAMPLE_NAME}.${CHROM}.samples" \
-        -a 3 0.33 0.33 0.34 \
-        -p 0 -1000 0.33 \
-        -p 1 -1000 0.33 \
-        -p 2 -1000 0.34 \
-        -e 0.05 -g
+        -a 3 ${p1} ${p2} ${p3} \
+        -p 0 -1000 ${p1} \
+        -p 1 -2 ${p2} \
+        -p 2 -2 ${p3} \
+        -e 0.01 -g
 
     echo "Done with $SAMPLE_NAME on $CHROM"
 
