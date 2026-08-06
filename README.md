@@ -179,44 +179,40 @@ bcftools query -f '%CHROM\t%POS\t%REF\t%ALT[\t%GT]\n' ${PREFIX}.merged.fspi.rm.v
 
 ### filtering, edits starting here made by Diana Tataru, December 2025 ###
 
-module load python3
+module load python
 
-python ${SCRIPTS_DIR}/genocounts_groups_threeway_v4.py ${WORKING_DIR}/lacnasgut_pops.txt ${PREFIX}.SNPs.fspi.rm.table > ${PREFIX}.SNPs.fspi.rm.counts.v5.txt
+python ${SCRIPTS_DIR}/genocounts_groups_threeway_v6.py ${WORKING_DIR}/lacnasgut_pops.txt ${PREFIX}.SNPs.fspi.rm.table > ${PREFIX}.SNPs.fspi.rm.counts.v6.txt
 
 awk -v OFS='\t' 'NR>1 {print $1,$2,$3,$4,$5,$6,$9,$10,$13,$14}' \
-    ${PREFIX}.SNPs.fspi.rm.counts.v5.txt \
-    > ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.txt
+    ${PREFIX}.SNPs.fspi.rm.counts.v6.txt \
+    > ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v6.txt
 
 printf "\n...make a column with species classification\n" | tee >(cat >&2)
-awk 'NR>1 {
-    g=$6; n=$8; l=$10;
+awk 'NR>1 {g=$6; n=$8; l=$10;max=g; species="guttatus"; \
+    if (n>max) {max=n; species="nasutus"} \
+    if (l>max) {species="laciniatus"} \
+    print $0 "\t" species}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v6.txt \
+    > panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v6.species.txt
 
-    max=g; species="guttatus";
-
-    if (n>max) {max=n; species="nasutus"}
-    if (l>max) {species="laciniatus"}
-
-    print $0 "\t" species
-}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v5.txt \
-   > panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v5.species.txt
-
+### NEW BALANCE BY DENSITY IN 100 KB WINDOWS
 printf "\n...balance number of aims by species density in 100kb windows\n" | tee >(cat >&2)
-python ${SCRIPTS_DIR}/thin_by_specieswindows.py ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.species.txt 100000 \
-    >  ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.speciesdensity.txt \
+python ${SCRIPTS_DIR}/thin_by_specieswindows.py ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v6.species.txt 100000 \
+    >  ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v6.speciesdensity.txt \
     2> thinning.stats
 
-sort -k1,1V -k2,2n ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.speciesdensity.txt > ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.speciesdensitysorted.txt
+sort -k1,1V -k2,2n ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v6.speciesdensity.txt > ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v6.speciesdensitysorted.txt
 
 printf "\n...edited to remove underscore in chromosome\n" | tee >(cat >&2)
 awk 'BEGIN{OFS="\t"} {gsub(/Chr_/,"Chr-",$1); print $1, $2, $3, $4}' \
-    ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.speciesdensitysorted.txt \
-    > /project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.v3.txt
+    ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v6.speciesdensitysorted.txt \
+    > /project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs.v6.txt
 
 awk 'BEGIN{OFS="\t"} {gsub(/Chr_/,"Chr-",$1); print $1, $2, $5, $6, $7, $8, $9, $10}' \
-    ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v5.speciesdensitysorted.txt \
-    > /project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.v3.txt
+    ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v6.speciesdensitysorted.txt \
+    > /project/dtataru/ancestryinfer/AIMs_panel15_final.AIMs_counts.v6.txt
+
 ```
-These are the two scripts called above, genocounts_groups_threeway_v4.py:
+These are the two scripts called above, genocounts_groups_threeway_v6.py:
 
 ```
 #!/usr/bin/python
@@ -271,39 +267,58 @@ with open(genofile) as f:
             else:  # ./.
                 counts[sp]["na"] += 1
         
-        # Compute ALT freq and only keep if >0.9 difference
-        
+        # Compute ALT freq
         props = {}
         valid_site = True
         for sp in species_list:
             total = counts[sp]["ref"] + counts[sp]["alt"]
             if total == 0:
-                valid_site = False   # Remove site if any species has zero counts
+                valid_site = False
                 break
             props[sp] = counts[sp]["alt"] / total
 
-        if valid_site:
-            # Count species with alt frequency >= 0.9
-            high_alt_species = [sp for sp, p in props.items() if p >= 0.9]
+        if not valid_site:
+            continue
 
-            # Remove site if more than one species is high-alt
-            if len(high_alt_species) == 1:
-                max_prop = max(props.values())
-                min_prop = min(props.values())
+        # --------------------------------------------------
+        # NEW FILTER: remove sites where any species has
+        # intermediate ref or alt  alleles (3-7)
+
+        valid_site = True
+        for sp in species_list:
+            ref_count = counts[sp]["ref"]
+            alt_count = counts[sp]["alt"]
+
+            if (3 <= ref_count <= 7) or (3 <= alt_count <= 7):
+                valid_site = False
+                break
+
+        if not valid_site:
+            continue
+        # --------------------------------------------------
+
+        # Count species with alt frequency >= 0.9
+        high_alt_species = [sp for sp, p in props.items() if p >= 0.9]
+
+        # Remove site if more than one species is high-alt
+        if len(high_alt_species) == 1:
+            max_prop = max(props.values())
+            min_prop = min(props.values())
+    
+            # Keep site only if difference >= 0.9
+            if (max_prop - min_prop) >= 0.9:
+                winner = high_alt_species[0]
+                highest_alt_counts[winner] += 1
         
-                # Keep site only if difference >= 0.9
-                if (max_prop - min_prop) >= 0.9:
-                    winner = high_alt_species[0]
-                    highest_alt_counts[winner] += 1
-            
-                    out = [chrom, pos, ref, alt]
-                    for sp in species_list:
-                        c = counts[sp]
-                        out += [str(c["ref"]), str(c["alt"]), str(c["na"]), str(c["n"])]
-                    print("\t".join(out))
+                out = [chrom, pos, ref, alt]
+                for sp in species_list:
+                    c = counts[sp]
+                    out += [str(c["ref"]), str(c["alt"]), str(c["na"]), str(c["n"])]
+                print("\t".join(out))
 
 # Print number of AIMs for each species
 print("Total high-ALT SNPs per species:", highest_alt_counts, file=sys.stderr)
+
 ```
 and thin_by_specieswindows.py:
 
@@ -389,177 +404,22 @@ Located in ```/project/dtataru/lac_nas_gut/AIMS```. This has multiple input file
       2.  Mnasutusvar_SF_822_v2.0.fa  
       3.  WLF47.fasta (consensus genome made by me with high coverage unpub. sequencing data  
 
-To visualize distribution of AIMs genomewide, run ```visualizeAIMs.R ```. This also outputs number of AIMS per chromosome. This is aims_v1:
+To visualize distribution of AIMs genomewide, run ```visualizeAIMs.R ```. This also outputs number of AIMS per chromosome. 
 
-| Chr01 | Chr02 | Chr03 | Chr04 | Chr05 | Chr06 | Chr07 | Chr08 | Chr09 | Chr10 | Chr11 | Chr12 | Chr13 | Chr14 |
-| ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
-|  9260 | 15019 | 11090 | 17851 | 13041 | 16073 | 8709  | 20077 | 10296 | 15111 | 11289 | 14642 | 15133 | 25823 | 
-
-number of AIMS per chromosome for aims_v2:
-
-| Chr01 | Chr02 | Chr03 | Chr04 | Chr05 | Chr06 | Chr07 | Chr08 | Chr09 | Chr10 | Chr11 | Chr12 | Chr13 | Chr14 |
-| ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- |
-|33172  |55669  |41019  |64583  |48556  |60589  | 33813 | 74756 | 41348 | 57280 | 43404 | 56877 | 54787 | 95319 | 
-
-### Editing different versions of AIMs (currently using aims_v5)
+### Editing different versions of AIMs (final version is aims v6)
 
 For aims_v1, ended up with 698623 remaining_sites.txt, then after filtering to sites uniquely fixed to each species and only one AIM for every 100 bp, ended up with 203414 sites. Need to revisit this filtering step because I'm worries that those many sites that weren't fixed were mostly guttatus and then when I subset I ended up with very few laciniatus sites. I think it has to do with the way sites were subset or some way that ref/alt is being called. I think I want to try to run this with the full set up unthinned AIMS that I got, with 1267995 total sites. After running this it is still off.
 
 I found a typo in my script which meant that nasutus counts were being called incorrectly. Also, it was not picking up whether the alt allele was the one identified in the AIMS, so I changed code to only match counts when the ref and alt from AIMs match those in the vcf. Lastly, I edited it so that when genotype call is: 0/0 = 2 0, 0/1 = 1 1, 1/1 = 0 2. I fixed these and reran (panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v2.filtered.thinned.txt), ended up with 800357 sites, and am now going to rerun them through steps 3 and 4, with 4 having different HMM priors. 
 
 I reran it and everything came up looking like 50% laciniatus, 50% nasutus. I think it has to do with this filtering line of code in my 0_genotype_filter_finalDT.sh script:
+
 ```
 awk '($5 != 0 || $7 != 0 || $9 != 0)' ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v2.txt > ${PREFIX}.SNPs.fspi.rm.AIMs_counts.v2.filtered.txt
 ```
 The goal of this line is to remove sites where all sites have the alternate allele, by removing sites where all species REF counts are 0, but that is not actually what I want. I actually want to just keep sites where the alt is unique to the species. 
 
-Additionally, these lines of code in genocounts_group_threeway.py are trying to filter but incorrectly because it doesn't account for the third species proportion:
-```
-# Check that each species has at least one called allele
-        if all((counts[sp]["ref"] + counts[sp]["alt"]) > 0 for sp in species_list):
-            # Calculate alt allele frequencies
-            props = {sp: counts[sp]["alt"] / max(1, counts[sp]["ref"]+counts[sp]["alt"]) for sp in species_list}
-            max_prop = max(props.values()) #highest alt proportion across species
-            min_prop = min(props.values()) #lowest alt proporiton across species
-            if (max_prop - min_prop) >= min_prop_diff:
-                out = [chrom,pos,ref,alt]
-                for sp in species_list:
-                    c = counts[sp]
-                    out += [str(c["ref"]), str(c["alt"]), str(c["na"]), str(c["n"])]
-                print("\t".join(out))
-```
-We want to do something similar to banarjee et al. 2023, "We thinned to an approximately equivalent number of informative sites between all pairs of species. To do so, we retained all ancestry-informative sites that distinguished X. birchmanni and X. malinche, and every other site that distinguished X. variatus from either of these two species." To do so I am changing that code to:
-```
-    # Compute ALT proportions for every species
-    props = {
-        sp: counts[sp]["alt"] / (counts[sp]["ref"] + counts[sp]["alt"])
-        for sp in species_list
-    }
-
-    # Count how many species have alt freq > 0.8
-    high_alt_species = [sp for sp, p in props.items() if p >= 0.8]
-	for sp in high_alt_species:
-    	high_alt_counts[sp] += 1
-
-    # keep site if only one species has alt proportion higher than 0.8
-    if len(high_alt_species) == 1:
-        out = [chrom, pos, ref, alt]
-        for sp in species_list:
-            c = counts[sp]
-            out += [str(c["ref"]), str(c["alt"]), str(c["na"]), str(c["n"])]
-        print("\t".join(out))
-		print("Total high-ALT SNPs per species:", high_alt_counts, file=sys.stderr)
-```
-
-panel15.TOL551.SNPs.fspi.rm.counts.v3.txt: 2,746,758 total sites
-Total high-ALT SNPs per species: {'guttatus': 658786, 'nasutus': 1076451, 'laciniatus': 1011520}
-Output thinned: 1,104,019 total sites
-
-Okay, so now I need to figure out how many of these thinned sites are max proportion ALT for each species, and thin to about equal numbers for each. It's still a little unclear to me whether it's better to filter sites before or after thinning. If I filtered before thinning then I would maybe have to thin again.
-
-```
-awk 'NR>1 {
-    max=$6; winner="guttatus";
-    if ($8>max) {max=$8; winner="nasutus"}
-    if ($10>max) {max=$10; winner="laciniatus"}
-    count[winner]++
-}
-END {
-    for (sp in count) print sp, count[sp]
-}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v3.thinned.txt
-```
-laciniatus 377015
-nasutus 427369
-guttatus 299634
-
-Not horribly different between species. So, the main difference between these aims_v3 and aims_v2 are that these ones contain sites where some species have all 0s. I think I do actually want filter by sites where all species have at least one count in ref or alt, and call that aims_v4.
-
-thinned.aims_v4: laciniatus 287938, nasutus 348803, guttatus 131002
-unthinned.aims_v4: {'guttatus': 257533, 'nasutus': 794065, 'laciniatus': 695118}
-
-I also want to do some species-aware balancing and then thinning to the unthinned.aims_v4. First I'll create a column to classify the species:
-
-```
-awk 'NR>1 {
-    g=$6; n=$8; l=$10;
-
-    max=g; species="guttatus";
-    if (n>max) {max=n; species="nasutus"}
-    if (l>max) {species="laciniatus"}
-
-    print $0 "\t" species
-}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.txt \
-    > panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.species.txt
-```
-Then balance by species in balance_species.py with
-```python balance_species.py /project/dtataru/lac_nas_gut/AIMS/VCFs/panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.species.txt /project/dtataru/lac_nas_gut/AIMS/VCFs/panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesbalanced.txt 257000``` 
-where 257000 is max_per_species I want to keep. Here is that script:
-
-```
-#!/usr/bin/python
-import sys, random
-
-###USAGE:python balance_species.py {AIM_counts}.species.txt {AIM_counts}.speciesbalanced.txt max_per_species
-
-infile = sys.argv[1]
-outfile = sys.argv[2]
-max_per_species = int(sys.argv[3])  # e.g. 200000
-
-species_rows = {"guttatus": [], "nasutus": [], "laciniatus": []}
-
-with open(infile) as f:
-    header = f.readline()
-    for line in f:
-        fields = line.strip().split("\t")
-        species = fields[-1]
-        species_rows[species].append(line)
-
-random.seed(42)
-
-balanced = []
-for sp in species_rows:
-    rows = species_rows[sp]
-    if len(rows) > max_per_species:
-        balanced += random.sample(rows, max_per_species)
-    else:
-        balanced += rows
-
-with open(outfile, "w") as out:
-    out.write(header)
-    for row in balanced:
-        out.write(row)
-
-for sp in species_rows:
-    print(sp, "kept", min(len(species_rows[sp]), max_per_species),
-          "of", len(species_rows[sp]), file=sys.stderr)
-```
-output said: guttatus kept 257000 of 275746, nasutus kept 257000 of 804072, laciniatus kept 257000 of 666896. and then do  thinning:
-```
- python /project/dtataru/lac_nas_gut/AIMS/thin_positions.py 100 panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesbalanced.txt > panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesbalanced.thinned.txt
-
-```
-Now lets look at the numbers:
-```
-awk 'NR>1 {
-    max=$6; winner="guttatus";
-    if ($8>max) {max=$8; winner="nasutus"}
-    if ($10>max) {max=$10; winner="laciniatus"}
-    count[winner]++
-}
-END {
-    for (sp in count) print sp, count[sp]
-}' panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesbalanced.thinned.txt
-```
-total of 490769 sites (771001 before thinning to one AIM per 100 bp), laciniatus 167507, nasutus 171174, guttatus 152087
-
-REDOING for aims_v5:
-wrote the script thin_byspecieswindows.py which is supposed to replace the original balancing and thinning scripts. this sets 100 kb windows and finds the species with the least amount of aims in the window and randomly thins to that number of aims, ending up with equal density per species across the genome. run it using:
-```
-python /project/dtataru/lac_nas_gut/AIMS/thin_by_specieswindows.py panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.species.txt 100000 \
-    >  panel15.TOL551.SNPs.fspi.rm.AIMs_counts.v4.speciesdensity.txt \
-    2> thinning.stats
-```
-thinning stats: guttatus 260444, nasutus 260448, laciniatus 260445, total 781,337
+We want to do something similar to banarjee et al. 2023, "We thinned to an approximately equivalent number of informative sites between all pairs of species. To do so, we retained all ancestry-informative sites that distinguished X. birchmanni and X. malinche, and every other site that distinguished X. variatus from either of these two species." 
 
 v5 of the aims is created with  genocounts_groups_threeway_v4.py and thin_by_specieswindows.py, and specifically only keeps sites where there is >90% difference in alt allele frequency of highest frequency and lowest frequency species (like in banarjee et al. 2023). This ends up being almost equal parts each species across SNPs. The output of this is the HMM_POSTPROCESS_structurepriors
 
